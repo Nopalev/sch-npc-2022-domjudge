@@ -191,6 +191,9 @@ class SecurityController extends AbstractController
             return $this->redirect($this->generateUrl('root'));
         }
 
-        return new Response('Try again later.');
+        return $this->render('bundles/TwigBundle/Exception/error.html.twig', [
+            'status_code' => 500,
+            'status_text' => 'Internal Server Error'
+        ]);
     }
 }

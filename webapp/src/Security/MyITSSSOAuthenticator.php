@@ -60,67 +60,71 @@ class MyITSSSOAuthenticator extends AbstractGuardAuthenticator
 
     public function getUser($credentials, UserProviderInterface $userProvider): ?UserInterface
     {
-        $oidc = new OpenIDConnectClient(
-            $this->params->get('openid.provider'), // authorization_endpoint
-            $this->params->get('openid.client_id'), // Client ID
-            $this->params->get('openid.client_secret') // Client Secret
-        );
-
-        $oidc->setRedirectURL($this->params->get('openid.redirect_uri')); // must be the same as you registered
-        $oidc->addScope($this->params->get('openid.scope')); //must be the same as you registered
-
-        if($this->params->get('kernel.environment') === 'dev') {
-            // remove this if in production mode
-            $oidc->setVerifyHost(false);
-            $oidc->setVerifyPeer(false);
-        }
-        $oidc->authenticate(); //call the main function of myITS SSO login
-
-        $_SESSION['id_token'] = $oidc->getIdToken(); // must be save for check session dan logout proccess
-        $userInfo = $oidc->requestUserInfo(); // this will return user information from myITS SSO database
-
-        // return new JsonResponse($userInfo);
-        $em = $this->em;
-
-        $nrp = $userInfo->reg_id;
-        $user = $em->getRepository(User::class)->findOneBy(['username' => $nrp]);
-
-        if (!$user) {
-            $user = new User();
-            $teamRole = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'team']);
-            $user->setUsername($nrp)->addUserRole($teamRole);
-        }
-
-        $team = $user->getTeam();
-        if (!$team) {
-            $team = new Team();
-            $participantCategory = $this->em->getRepository(TeamCategory::class)->findOneBy(['categoryid' => 3]);
-            $itsAffiliation = $this->em->getRepository(TeamAffiliation::class)->findOneBy(['externalid' => 'its']);
+        try {
+            $oidc = new OpenIDConnectClient(
+                $this->params->get('openid.provider'), // authorization_endpoint
+                $this->params->get('openid.client_id'), // Client ID
+                $this->params->get('openid.client_secret') // Client Secret
+            );
+    
+            $oidc->setRedirectURL($this->params->get('openid.redirect_uri')); // must be the same as you registered
+            $oidc->addScope($this->params->get('openid.scope')); //must be the same as you registered
+    
+            if($this->params->get('kernel.environment') === 'dev') {
+                // remove this if in production mode
+                $oidc->setVerifyHost(false);
+                $oidc->setVerifyPeer(false);
+            }
+            $oidc->authenticate(); //call the main function of myITS SSO login
+    
+            $_SESSION['id_token'] = $oidc->getIdToken(); // must be save for check session dan logout proccess
+            $userInfo = $oidc->requestUserInfo(); // this will return user information from myITS SSO database
+    
+            // return new JsonResponse($userInfo);
+            $em = $this->em;
+    
+            $nrp = $userInfo->reg_id;
+            $user = $em->getRepository(User::class)->findOneBy(['username' => $nrp]);
+    
+            if (!$user) {
+                $user = new User();
+                $teamRole = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'team']);
+                $user->setUsername($nrp)->addUserRole($teamRole);
+            }
+    
+            $team = $user->getTeam();
+            if (!$team) {
+                $team = new Team();
+                $participantCategory = $this->em->getRepository(TeamCategory::class)->findOneBy(['categoryid' => 3]);
+                $itsAffiliation = $this->em->getRepository(TeamAffiliation::class)->findOneBy(['externalid' => 'its']);
+                $team
+                    ->setIcpcid($nrp)
+                    ->setCategory($participantCategory)
+                    ->setAffiliation($itsAffiliation);
+            }
+    
             $team
-                ->setIcpcid($nrp)
-                ->setCategory($participantCategory)
-                ->setAffiliation($itsAffiliation);
+                ->setName($userInfo->name)
+                ->setDisplayName($userInfo->name)
+                ->setMembers(sprintf("Nama: %s\nNRP: %s", $userInfo->name, $nrp));
+            
+            $em->persist($team);
+            $em->flush();
+    
+            $user
+                ->setName($userInfo->name)
+                ->setEmail($userInfo->email)
+                ->setPlainPassword(random_bytes(16))
+                ->setEnabled(true)
+                ->setTeam($team);
+            
+            $em->persist($user);
+            $em->flush();
+    
+            return $user;
+        } catch(Exception $e) {
+            throw new AuthenticationException($e->getMessage(), $e->getCode(), $e);
         }
-
-        $team
-            ->setName($userInfo->name)
-            ->setDisplayName($userInfo->name)
-            ->setMembers(sprintf("Nama: %s\nNRP: %s", $userInfo->name, $nrp));
-        
-        $em->persist($team);
-        $em->flush();
-
-        $user
-            ->setName($userInfo->name)
-            ->setEmail($userInfo->email)
-            ->setPlainPassword(random_bytes(16))
-            ->setEnabled(true)
-            ->setTeam($team);
-        
-        $em->persist($user);
-        $em->flush();
-
-        return $user;
     }
 
     public function checkCredentials($credentials, UserInterface $user): bool
@@ -140,15 +144,7 @@ class MyITSSSOAuthenticator extends AbstractGuardAuthenticator
 
     public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        $data = [
-            // you may want to customize or obfuscate the message first
-            'message' => strtr($exception->getMessageKey(), $exception->getMessageData())
-
-            // or to translate this message
-            // $this->translator->trans($exception->getMessageKey(), $exception->getMessageData())
-        ];
-
-        return new JsonResponse($data, Response::HTTP_UNAUTHORIZED);
+        return null;
     }
 
     /**
