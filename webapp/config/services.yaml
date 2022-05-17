@@ -8,6 +8,12 @@ parameters:
     # Enable this to support removing time intervals from the contest.
     # This code is rarely tested and we discourage using it.
     removed_intervals: false
+    openid.provider: '%env(resolve:OPENID_PROVIDER)%'
+    openid.client_id: '%env(resolve:OPENID_CLIENT_ID)%'
+    openid.client_secret: '%env(resolve:OPENID_CLIENT_SECRET)%'
+    openid.redirect_uri: '%env(resolve:OPENID_REDIRECT_URI)%'
+    openid.post_logout_redirect_uri: '%env(resolve:OPENID_POST_LOGOUT_REDIRECT_URI)%'
+    openid.scope: '%env(resolve:OPENID_SCOPE)%'
 
 services:
     # default configuration for services in *this* file

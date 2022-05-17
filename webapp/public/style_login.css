@@ -8,6 +8,15 @@
 .btn-primary {
     background: var(--btn-primary-bg);
 }
+.btn-its:hover {
+  background-color: #001737;
+  color: #fff;
+}
+.btn-its {
+  background: #013880;
+  color: #fff;
+}
+
 
 .text-muted {
     color: #616870 !important;

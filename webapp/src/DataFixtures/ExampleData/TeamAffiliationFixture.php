@@ -16,10 +16,10 @@ class TeamAffiliationFixture extends AbstractExampleDataFixture
     {
         $affiliation = new TeamAffiliation();
         $affiliation
-            ->setExternalid('utrecht')
-            ->setShortname('UU')
-            ->setName('Utrecht University')
-            ->setCountry('NLD');
+            ->setExternalid('its')
+            ->setShortname('ITS')
+            ->setName('Institut Teknologi Sepuluh Nopember')
+            ->setCountry('IDN');
 
         $manager->persist($affiliation);
         $manager->flush();

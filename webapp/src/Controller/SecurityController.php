@@ -2,7 +2,6 @@
 
 namespace App\Controller;
 
-use App\Entity\Role;
 use App\Entity\Team;
 use App\Entity\TeamAffiliation;
 use App\Entity\TeamCategory;
@@ -20,6 +19,7 @@ use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
+use Its\Sso\OpenIDConnectClient;
 
 class SecurityController extends AbstractController
 {
@@ -178,5 +178,19 @@ class SecurityController extends AbstractController
         }
 
         return $this->render('security/register.html.twig', ['registration_form' => $registration_form->createView()]);
+    }
+
+    /**
+     * @Route("/oidc", name="oidc")
+     * @return RedirectResponse|Response
+     * @throws Exception
+     */
+    public function oidcAction(AuthorizationCheckerInterface $authorizationChecker)
+    {
+        if ($authorizationChecker->isGranted('IS_AUTHENTICATED_FULLY')) {
+            return $this->redirect($this->generateUrl('root'));
+        }
+
+        return new Response('Try again later.');
     }
 }
