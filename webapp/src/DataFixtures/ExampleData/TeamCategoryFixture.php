@@ -33,6 +33,15 @@ class TeamCategoryFixture extends AbstractExampleDataFixture
         $manager->persist($participants);
         $manager->persist($observers);
         $manager->persist($organisation);
+
+        $classes = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'IUP'];
+
+        foreach($classes as $class) {
+            $praktikanKelas = new TeamCategory();
+            $praktikanKelas->setName('Praktikan Kelas ' . $class);
+            $manager->persist($praktikanKelas);
+        }
+        
         $manager->flush();
 
         $this->addReference(self::PARTICIPANTS_REFERENCE, $participants);
