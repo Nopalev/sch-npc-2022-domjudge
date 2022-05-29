@@ -65,7 +65,7 @@ security:
                 authenticators:
                     - App\Security\DOMJudgeXHeadersAuthenticator
                     - App\Security\DOMJudgeIPAuthenticator
-                    - App\Security\MyITSSSOAuthenticator
+                    # - App\Security\MyITSSSOAuthenticator
                 entry_point: App\Security\DOMJudgeXHeadersAuthenticator
             anonymous: ~
             form_login:
