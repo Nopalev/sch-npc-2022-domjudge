@@ -6,6 +6,7 @@ use App\Controller\BaseController;
 use App\Entity\Clarification;
 use App\Entity\Language;
 use App\Form\Type\PrintType;
+use App\Form\Type\TeamChangePasswordType;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\ScoreboardService;
@@ -16,6 +17,7 @@ use Doctrine\ORM\NoResultException;
 use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
+use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -23,6 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Routing\RouterInterface;
+use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 
 /**
  * Class MiscController
@@ -61,6 +64,16 @@ class MiscController extends BaseController
     protected $submissionService;
 
     /**
+     * @var FormFactoryInterface
+     */
+    protected $formFactory;
+
+    /**
+     * @var UserPasswordEncoderInterface
+     */
+    protected $passwordEncoder;
+
+    /**
      * MiscController constructor.
      */
     public function __construct(
@@ -68,13 +81,17 @@ class MiscController extends BaseController
         ConfigurationService $config,
         EntityManagerInterface $em,
         ScoreboardService $scoreboardService,
-        SubmissionService $submissionService
+        SubmissionService $submissionService,
+        FormFactoryInterface $formFactory,
+        UserPasswordEncoderInterface $passwordEncoder
     ) {
         $this->dj                = $dj;
         $this->config            = $config;
         $this->em                = $em;
         $this->scoreboardService = $scoreboardService;
         $this->submissionService = $submissionService;
+        $this->formFactory       = $formFactory;
+        $this->passwordEncoder = $passwordEncoder;
     }
 
     /**
@@ -236,5 +253,43 @@ class MiscController extends BaseController
     public function docsAction(): Response
     {
         return $this->render('team/docs.html.twig');
+    }
+
+    /**
+     * @Route("/change-password", name="team_change_password")
+     * @throws Exception
+     */
+    public function createAction(Request $request): Response
+    {
+        $user    = $this->dj->getUser();
+        $form    = $this->formFactory
+            ->createBuilder(TeamChangePasswordType::class)
+            ->setAction($this->generateUrl('team_change_password'))
+            ->getForm();
+
+        $form->handleRequest($request);
+
+        if ($form->isSubmitted() && $form->isValid()) {
+            try {
+                /** @var string $password */
+                $password = $form->get('password')->getData();
+    
+                $user->setPassword(
+                    $this->passwordEncoder->encodePassword($user, $password)
+                );
+                $this->em->flush();
+                $this->addFlash(
+                    'success',
+                    'Password changed.'
+                );
+            } catch (\Exception $e) {
+                $this->addFlash('danger', 'Failed to change password.');
+            }
+            return $this->redirectToRoute('team_index');
+        }
+
+        $data = ['form' => $form->createView()];
+
+        return $this->render('team/change-password.html.twig', $data);
     }
 }
