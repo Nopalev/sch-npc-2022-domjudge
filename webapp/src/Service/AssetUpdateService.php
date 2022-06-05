@@ -3,24 +3,12 @@
 namespace App\Service;
 
 use App\Entity\AssetEntityInterface;
-use App\Entity\BaseApiEntity;
-use App\Entity\Contest;
-use App\Entity\Team;
-use App\Entity\TeamAffiliation;
 use Symfony\Component\Filesystem\Filesystem;
-use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class AssetUpdateService
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLog;
+    protected DOMJudgeService $dj;
+    protected EventLogService $eventLog;
 
     public function __construct(DOMJudgeService $dj, EventLogService $eventLog)
     {
@@ -29,7 +17,7 @@ class AssetUpdateService
     }
 
     /**
-     * Update assets for the given entity
+     * Update assets for the given entity.
      */
     public function updateAssets(AssetEntityInterface &$entity): void
     {

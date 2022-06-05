@@ -4,7 +4,9 @@ namespace App\Entity;
 
 use App\Utils\Utils;
 use App\Validator\Constraints\TimeString;
+use DateTime;
 use Doctrine\ORM\Mapping as ORM;
+use Exception;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
@@ -14,23 +16,21 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="removed_interval",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Time intervals removed from the contest for scoring"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Time intervals removed from the contest for scoring"},
  *     indexes={@ORM\Index(name="cid", columns={"cid"})})
  */
 class RemovedInterval
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="intervalid", length=4,
      *     options={"comment"="Removed interval ID","unsigned"=true}, nullable=false)
      */
-    private $intervalid;
+    private int $intervalid;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime",
      *     options={"comment"="Initial time of removed interval", "unsigned"=true},
      *     nullable=false)
@@ -38,7 +38,7 @@ class RemovedInterval
     private $starttime;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="endtime",
      *     options={"comment"="Final time of removed interval", "unsigned"=true},
      *     nullable=false)
@@ -46,28 +46,26 @@ class RemovedInterval
     private $endtime;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="starttime_string",
      *     options={"comment"="Authoritative (absolute only) string representation of starttime"},
      *     nullable=false)
      * @TimeString(allowRelative=false)
      */
-    private $starttimeString;
+    private string $starttimeString;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="endtime_string",
      *     options={"comment"="Authoritative (absolute only) string representation of endtime"},
      *     nullable=false)
      * @TimeString(allowRelative=false)
      */
-    private $endtimeString;
+    private string $endtimeString;
 
     /**
      * @ORM\ManyToOne(targetEntity="Contest", inversedBy="removedIntervals")
      * @ORM\JoinColumn(name="cid", referencedColumnName="cid", onDelete="CASCADE")
      */
-    private $contest;
+    private Contest $contest;
 
     public function getIntervalid(): ?int
     {
@@ -101,12 +99,12 @@ class RemovedInterval
     }
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function setStarttimeString(string $starttimeString): RemovedInterval
     {
         $this->starttimeString = $starttimeString;
-        $date                  = new \DateTime($starttimeString);
+        $date                  = new DateTime($starttimeString);
         $this->starttime       = $date->format('U.v');
 
         return $this;
@@ -118,12 +116,12 @@ class RemovedInterval
     }
 
     /**
-     * @throws \Exception
+     * @throws Exception
      */
     public function setEndtimeString(string $endtimeString): RemovedInterval
     {
         $this->endtimeString = $endtimeString;
-        $date                = new \DateTime($endtimeString);
+        $date                = new DateTime($endtimeString);
         $this->endtime       = $date->format('U.v');
 
         return $this;

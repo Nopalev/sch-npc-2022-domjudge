@@ -15,10 +15,9 @@ use App\Service\ImportProblemService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use OpenApi\Annotations as OA;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -36,15 +35,8 @@ use Symfony\Component\Yaml\Yaml;
  */
 class ProblemController extends AbstractRestController implements QueryObjectTransformer
 {
-    /**
-     * @var ImportProblemService
-     */
-    protected $importProblemService;
-
-    /**
-     * @var ImportExportService
-     */
-    protected $importExportService;
+    protected ImportProblemService $importProblemService;
+    protected ImportExportService $importExportService;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -82,9 +74,11 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      *     response="200",
      *     description="Returns the API ID's of the added problems.",
      * )
+     *
      * @throws BadRequestHttpException
+     * @throws NonUniqueResultException
      */
-    public function addProblemsAction(Request $request) : array
+    public function addProblemsAction(Request $request): array
     {
         // Note we use /add-data as URL here since we already have a route listening
         // on POST /, which is to add a problem ZIP.
@@ -105,7 +99,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
     }
 
     /**
-     * Get all the problems for this contest
+     * Get all the problems for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -118,13 +112,13 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * @OA\Parameter(ref="#/components/parameters/idlist")
      * @OA\Parameter(ref="#/components/parameters/strict")
      * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function listAction(Request $request): Response
     {
-        // Make sure we clear the entity manager class, for when this method is called multiple times by internal requests
+        // Make sure we clear the entity manager class, for when this method is called multiple times
+        // by internal requests.
         $this->em->clear();
-        // This method is overwritten, because we need to add ordinal values
+        // This method is overwritten, because we need to add ordinal values.
         $queryBuilder = $this->getQueryBuilder($request);
 
         $objects = $queryBuilder
@@ -141,11 +135,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
         $objects      = $ordinalArray->getItems();
 
         if ($request->query->has('ids')) {
-            $ids = $request->query->get('ids', []);
-            if (!is_array($ids)) {
-                throw new BadRequestHttpException('\'ids\' should be an array of ID\'s to fetch');
-            }
-
+            $ids = $request->query->all('ids');
             $ids = array_unique($ids);
 
             $objects = [];
@@ -190,6 +180,11 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      *                 property="problem",
      *                 description="Optional: problem id to update.",
      *                 type="string"
+     *             ),
+     *             @OA\Property(
+     *                 property="delete_old_data",
+     *                 description="Optional: whether to delete old (existing) data before importing into an existing problem.",
+     *                 type="boolean"
      *             )
      *         )
      *     )
@@ -207,71 +202,145 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * )
      * @throws NonUniqueResultException
      */
-    public function addProblemAction(Request $request) : array
+    public function addProblemAction(Request $request): array
     {
-        $file     = $request->files->get('zip');
-        if (empty($file)) {
-            throw new BadRequestHttpException('ZIP file missing');
-        }
-
-        $contestId = $this->getContestId($request);
-        /** @var Contest $contest */
-        $contest     = $this->em->getRepository(Contest::class)->find($contestId);
-        $allMessages = [];
-
-        // Only timeout after 2 minutes, since importing may take a while.
-        set_time_limit(120);
-
-        $probId = $request->request->get('problem');
-        $problem = null;
-        if (!empty($probId)) {
-            $problem = $this->em->createQueryBuilder()
-                ->from(Problem::class, 'p')
-                ->select('p')
-                ->andWhere(sprintf('%s = :id', $this->getIdField()))
-                ->setParameter(':id', $probId)
-                ->getQuery()
-                ->getOneOrNullResult();
-            if (empty($problem)) {
-                throw new BadRequestHttpException('Specified \'problem\' does not exist.');
-            }
-        }
-        $errors = [];
-        $zip = null;
-        try {
-            $zip         = $this->dj->openZipFile($file->getRealPath());
-            $clientName  = $file->getClientOriginalName();
-            $messages    = [];
-            $newProblem  = $this->importProblemService->importZippedProblem(
-                $zip, $clientName, $problem, $contest, $messages
-            );
-            $allMessages = array_merge($allMessages, $messages);
-            if ($newProblem) {
-                $this->dj->auditlog('problem', $newProblem->getProbid(), 'upload zip', $clientName);
-                $probId = $newProblem->getApiId($this->eventLogService);
-            } else {
-                $errors = array_merge($errors, $messages);
-            }
-        } catch (Exception $e) {
-            $allMessages[] = $e->getMessage();
-        } finally {
-            if ($zip) {
-                $zip->close();
-            }
-        }
-        if (!empty($errors)) {
-            throw new BadRequestHttpException(json_encode($errors));
-        }
-        return [
-            'problem_id' => $probId,
-            'messages' => $allMessages,
-        ];
+        return $this->importProblemService->importProblemFromRequest($request, $this->getContestId($request));
     }
 
     /**
-     * Get the given problem for this contest
+     * Unlink a problem from this contest.
+     * @Rest\Delete("/{id}")
+     * @IsGranted("ROLE_ADMIN")
+     * @OA\Response(response="204", description="Problem unlinked from contest succeeded")
+     * @OA\Parameter(ref="#/components/parameters/id")
+     */
+    public function unlinkProblemAction(Request $request, string $id): Response
+    {
+        $problem = $this->em->createQueryBuilder()
+                            ->from(Problem::class, 'p')
+                            ->select('p')
+                            ->andWhere(sprintf('%s = :id', $this->getIdField()))
+                            ->setParameter('id', $id)
+                            ->getQuery()
+                            ->getOneOrNullResult();
+
+        if (empty($problem)) {
+            throw new NotFoundHttpException(sprintf('Object with ID \'%s\' not found', $id));
+        }
+
+        $cid = $this->getContestId($request);
+
+        /** @var ContestProblem|null $contestProblem */
+        $contestProblem = $this->em->createQueryBuilder()
+                                   ->from(ContestProblem::class, 'cp')
+                                   ->select('cp')
+                                   ->andWhere('cp.contest = :contest')
+                                   ->andWhere('cp.problem = :problem')
+                                   ->setParameter('contest', $cid)
+                                   ->setParameter('problem', $problem)
+                                   ->getQuery()
+                                   ->getOneOrNullResult();
+
+        if (empty($contestProblem)) {
+            throw new NotFoundHttpException(sprintf('Object with ID \'%s\' not found', $id));
+        }
+
+        $this->em->remove($contestProblem);
+        $id = [$contestProblem->getCid(), $contestProblem->getProbid()];
+        $this->dj->auditlog('contest_problem', implode(', ', $id), 'deleted');
+        $this->eventLogService->log('problem', $contestProblem->getProbid(),
+                                    EventLogService::ACTION_DELETE, $cid,
+                                    null, null, false);
+
+        return new Response('', Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Link an existing problem to this contest.
+     * @Rest\Put("/{id}")
+     * @IsGranted("ROLE_ADMIN")
+     * @OA\RequestBody(
+     *     required=true,
+     *     @OA\MediaType(
+     *         mediaType="application/json",
+     *         @OA\Schema(ref="#/components/schemas/ContestProblemPut")
+     *     )
+     * )
+     * @OA\Response(
+     *     response="200",
+     *     description="Returns the linked problem for this contest",
+     *     @OA\JsonContent(ref="#/components/schemas/ContestProblem")
+     * )
+     * @OA\Parameter(ref="#/components/parameters/id")
+     */
+    public function linkProblemAction(Request $request, string $id): Response
+    {
+        $required = ['label'];
+        foreach ($required as $argument) {
+            if (!$request->request->has($argument)) {
+                throw new BadRequestHttpException(sprintf("Argument '%s' is mandatory.", $argument));
+            }
+        }
+
+        $problem = $this->em->createQueryBuilder()
+                            ->from(Problem::class, 'p')
+                            ->select('p')
+                            ->andWhere(sprintf('%s = :id', $this->getIdField()))
+                            ->setParameter('id', $id)
+                            ->getQuery()
+                            ->getOneOrNullResult();
+
+        if (empty($problem)) {
+            throw new NotFoundHttpException(sprintf('Object with ID \'%s\' not found', $id));
+        }
+
+        $cid = $this->getContestId($request);
+
+        /** @var ContestProblem|null $contestProblem */
+        $contestProblem = $this->em->createQueryBuilder()
+                                   ->from(ContestProblem::class, 'cp')
+                                   ->select('cp')
+                                   ->andWhere('cp.contest = :contest')
+                                   ->andWhere('cp.problem = :problem')
+                                   ->setParameter('contest', $cid)
+                                   ->setParameter('problem', $problem)
+                                   ->getQuery()
+                                   ->getOneOrNullResult();
+
+        if (!empty($contestProblem)) {
+            throw new BadRequestHttpException('Problem already linked to contest');
+        }
+
+        $contest = $this->em->getRepository(Contest::class)->find($this->getContestId($request));
+
+        $lazyEvalResults = null;
+        if ($request->request->has('lazy_eval_results')) {
+            $lazyEvalResults = $request->request->getBoolean('lazy_eval_results');
+        }
+
+        $contestProblem = (new ContestProblem())
+            ->setContest($contest)
+            ->setProblem($problem)
+            ->setShortname($request->request->get('label'))
+            ->setColor($request->request->get('rgb') ?? $request->request->get('color'))
+            ->setPoints($request->request->getInt('points', 1))
+            ->setLazyEvalResults($lazyEvalResults);
+
+        $this->em->persist($contestProblem);
+        $this->em->flush();
+
+        $fullId = [$contestProblem->getCid(), $contestProblem->getProbid()];
+        $this->dj->auditlog('contest_problem', implode(', ', $fullId), 'added');
+        $this->eventLogService->log('problem', $contestProblem->getProbid(),
+                                    EventLogService::ACTION_CREATE, $cid,
+                                    null, null, false);
+
+        return $this->singleAction($request, $id);
+    }
+
+    /**
+     * Get the given problem for this contest.
      * @throws NonUniqueResultException
-     * @throws Exception
      * @Rest\Get("/{id}")
      * @OA\Response(
      *     response="200",
@@ -281,7 +350,7 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         $ordinalArray = new OrdinalArray($this->listActionHelper($request));
 
@@ -319,11 +388,11 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
             ->select('cp, partial p.{probid,externalid,name,timelimit,memlimit}, COUNT(tc.testcaseid) AS testdatacount')
             ->andWhere('cp.contest = :cid')
             ->andWhere('cp.allowSubmit = 1')
-            ->setParameter(':cid', $contestId)
+            ->setParameter('cid', $contestId)
             ->orderBy('cp.shortname')
             ->groupBy('cp.problem');
 
-        // For non-API-reader users, only expose the problems after the contest has started
+        // For non-API-reader users, only expose the problems after the contest has started.
         if (!$this->dj->checkrole('api_reader') && $contest->getStartTimeObject()->getTimestamp() > time()) {
             $queryBuilder->andWhere('1 = 0');
         }
@@ -331,18 +400,15 @@ class ProblemController extends AbstractRestController implements QueryObjectTra
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('p.%s', $this->eventLogService->externalIdFieldForEntity(Problem::class) ?? 'probid');
     }
 
     /**
-     * Transform the given object before returning it from the API
-     * @param mixed $object
-     * @return mixed
+     * Transform the given object before returning it from the API.
+     * @param array $object
+     * @return ContestProblem|ContestProblemWrapper
      */
     public function transformObject($object)
     {

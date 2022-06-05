@@ -8,9 +8,9 @@
 			"type": "package",
 			"package": {
 				"name": "fortawesome/font-awesome",
-				"version": "5.9.0",
+				"version": "6.1.1",
 				"dist": {
-					"url": "https://github.com/FortAwesome/Font-Awesome/releases/download/5.9.0/fontawesome-free-5.9.0-web.zip",
+					"url": "https://github.com/FortAwesome/Font-Awesome/releases/download/6.1.1/fontawesome-free-6.1.1-web.zip",
 					"type": "zip"
 				}
 			}
@@ -19,9 +19,9 @@
 			"type": "package",
 			"package": {
 				"name": "angel-vladov/select2-theme-bootstrap4",
-				"version": "0.2.0-beta.3",
+				"version": "1.0.1",
 				"dist": {
-					"url": "https://github.com/angel-vladov/select2-theme-bootstrap4/archive/0.2.0-beta.3.zip",
+					"url": "https://github.com/angel-vladov/select2-theme-bootstrap4/archive/1.0.1.zip",
 					"type": "zip"
 				}
 			}
@@ -30,16 +30,16 @@
 			"type": "package",
 			"package": {
 				"name": "eligrey/filesaver",
-				"version": "2.0.2",
+				"version": "2.0.4",
 				"dist": {
-					"url": "https://github.com/eligrey/FileSaver.js/archive/v2.0.2.zip",
+					"url": "https://github.com/eligrey/FileSaver.js/archive/v2.0.4.zip",
 					"type": "zip"
 				}
 			}
 		}
 	],
 	"require": {
-		"php": "^7.2.5",
+		"php": "^7.4.0",
 		"ext-ctype": "*",
 		"ext-curl": "*",
 		"ext-fileinfo": "*",
@@ -50,61 +50,68 @@
 		"ext-mbstring": "*",
 		"ext-mysqli": "*",
 		"ext-pcntl": "*",
+		"ext-posix": "*",
+		"ext-simplexml": "*",
 		"ext-zip": "*",
-		"angel-vladov/select2-theme-bootstrap4": "0.2.0-beta.3",
+		"angel-vladov/select2-theme-bootstrap4": "1.0.1",
 		"components/flag-icon-css": "^3.5",
-		"components/jquery": "^3.3",
+		"components/jquery": "^3.6",
 		"datatables/datatables": "^1.10",
-		"doctrine/doctrine-bundle": "^2.0",
-		"doctrine/doctrine-fixtures-bundle": "^3.2",
-		"doctrine/doctrine-migrations-bundle": "^2.0",
-		"doctrine/orm": "^2.6",
+		"doctrine/doctrine-bundle": "^2.6",
+		"doctrine/doctrine-fixtures-bundle": "^3.4",
+		"doctrine/doctrine-migrations-bundle": "^3.2",
+		"doctrine/orm": "^2.12",
 		"eligrey/filesaver": "2.*",
-		"endclothing/prometheus_client_php": "^0.9.1",
-		"fortawesome/font-awesome": "5.*",
-		"friendsofsymfony/rest-bundle": "^3.0",
+		"endclothing/prometheus_client_php": "^1.0",
+		"fortawesome/font-awesome": "6.*",
+		"friendsofsymfony/rest-bundle": "^3.3",
 		"ircmaxell/password-compat": "*",
-		"jms/serializer-bundle": "^3.4",
+		"jms/serializer-bundle": "^4.0",
+		"league/commonmark": "^2.3",
 		"mbostock/d3": "^3.5",
 		"myits/openid-connect-client": "*",
-		"nelmio/api-doc-bundle": "^4.2",
+		"nelmio/api-doc-bundle": "^4.9",
 		"novus/nvd3": "^1.8",
-		"phpunit/phpunit": "~8.4",
+		"phpunit/phpunit": "~9.5",
 		"ramsey/uuid": "^4.2",
-		"sebastian/diff": "^3.0",
+		"sebastian/diff": "^4.0",
 		"select2/select2": "4.*",
-		"sensio/framework-extra-bundle": "^5.4.0",
-		"symfony/asset": "4.4.*",
-		"symfony/browser-kit": "4.4.*",
-		"symfony/console": "4.4.*",
-		"symfony/css-selector": "4.4.*",
-		"symfony/dotenv": "4.4.*",
-		"symfony/expression-language": "4.4.*",
-		"symfony/flex": "^1.4",
-		"symfony/form": "4.4.*",
-		"symfony/framework-bundle": "4.4.*",
-		"symfony/http-client": "4.4.*",
+		"sensio/framework-extra-bundle": "^6.2",
+		"sentry/sentry-symfony": "^4.2",
+		"symfony/asset": "5.4.*",
+		"symfony/browser-kit": "5.4.*",
+		"symfony/console": "5.4.*",
+		"symfony/css-selector": "5.4.*",
+		"symfony/dotenv": "5.4.*",
+		"symfony/expression-language": "5.4.*",
+		"symfony/flex": "^1",
+		"symfony/form": "5.4.*",
+		"symfony/framework-bundle": "5.4.*",
+		"symfony/http-client": "5.4.*",
+		"symfony/intl": "5.4.*",
+		"symfony/mime": "5.4.*",
 		"symfony/monolog-bundle": "^3.4.0",
-		"symfony/security-bundle": "4.4.*",
-		"symfony/security-csrf": "4.4.*",
-		"symfony/stopwatch": "4.4.*",
-		"symfony/twig-bundle": "^4.4",
-		"symfony/validator": "4.4.*",
-		"symfony/web-profiler-bundle": "4.4.*",
-		"symfony/yaml": "4.4.*",
-		"twbs/bootstrap": "^4.3.0",
-		"twig/extra-bundle": "^3.3",
-		"twig/string-extra": "^3.3",
-		"twig/twig": "^2.11"
+		"symfony/security-bundle": "5.4.*",
+		"symfony/security-csrf": "5.4.*",
+		"symfony/stopwatch": "5.4.*",
+		"symfony/twig-bundle": "5.4.*",
+		"symfony/validator": "5.4.*",
+		"symfony/web-profiler-bundle": "5.4.*",
+		"symfony/yaml": "5.4.*",
+		"twbs/bootstrap": "^4.6.0",
+		"twig/extra-bundle": "^3.4",
+		"twig/markdown-extra": "^3.4",
+		"twig/string-extra": "^3.4",
+		"twig/twig": "^3.4"
 	},
 	"require-dev": {
 		"ext-dom": "*",
-		"dama/doctrine-test-bundle": "^6.5",
+		"dama/doctrine-test-bundle": "^7.0",
 		"squizlabs/php_codesniffer": "*",
-		"symfony/debug-bundle": "4.4.*",
-		"symfony/maker-bundle": "^1.13",
-		"symfony/phpunit-bridge": "^4.4",
-		"symfony/var-dumper": "4.4.*"
+		"symfony/debug-bundle": "5.4.*",
+		"symfony/maker-bundle": "^1.42",
+		"symfony/phpunit-bridge": "6.0.*",
+		"symfony/var-dumper": "5.4.*"
 	},
 	"autoload": {
 		"psr-4": {
@@ -122,7 +129,7 @@
 		},
 		"sort-packages": true,
 		"platform": {
-			"php": "7.2.5"
+			"php": "7.4.0"
 		},
 		"vendor-dir": "lib/vendor",
 		"component-dir": "lib/vendor/components",
@@ -149,8 +156,7 @@
 		],
 		"post-update-cmd": [
 			"@auto-scripts"
-		],
-		"package-versions-dump": "PackageVersions\\Installer::dumpVersionsClass"
+		]
 	},
 	"conflict": {
 		"symfony/symfony": "*"
@@ -159,7 +165,7 @@
 		"symfony": {
 			"root-dir": "webapp/",
 			"allow-contrib": true,
-			"require": "4.4.*"
+			"require": "5.4.*"
 		}
 	}
 }

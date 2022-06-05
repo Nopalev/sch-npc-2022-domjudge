@@ -18,27 +18,10 @@ use JMS\Serializer\Metadata\StaticPropertyMetadata;
  */
 class SubmissionVisitor implements EventSubscriberInterface
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected DOMJudgeService $dj;
+    protected EventLogService $eventLogService;
+    protected EntityManagerInterface $em;
 
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * SubmissionVisitor constructor.
-     * @param DOMJudgeService        $dj
-     * @param EventLogService        $eventLogService
-     * @param EntityManagerInterface $em
-     */
     public function __construct(
         DOMJudgeService $dj,
         EventLogService $eventLogService,
@@ -49,10 +32,7 @@ class SubmissionVisitor implements EventSubscriberInterface
         $this->em              = $em;
     }
 
-    /**
-     * @inheritdoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             [
@@ -64,11 +44,7 @@ class SubmissionVisitor implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ObjectEvent $event
-     * @throws \Exception
-     */
-    public function onPostSerialize(ObjectEvent $event)
+    public function onPostSerialize(ObjectEvent $event): void
     {
         if ($this->dj->checkrole('jury')) {
             /** @var JsonSerializationVisitor $visitor */

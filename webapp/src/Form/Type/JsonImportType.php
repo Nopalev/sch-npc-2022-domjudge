@@ -9,13 +9,14 @@ use Symfony\Component\Form\FormBuilderInterface;
 
 class JsonImportType extends AbstractType
 {
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('type', ChoiceType::class, [
             'choices' => [
                 'groups' => 'groups',
                 'organizations' => 'organizations',
                 'teams' => 'teams',
+                'accounts' => 'accounts',
             ],
         ]);
         $builder->add('file', BootstrapFileType::class, [

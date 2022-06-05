@@ -11,7 +11,6 @@ use App\Service\ScoreboardService;
 use App\Service\StatisticsService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
-use Exception;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,30 +29,11 @@ use Symfony\Component\Routing\RouterInterface;
  */
 class PublicController extends BaseController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var StatisticsService
-     */
-    protected $stats;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected ScoreboardService $scoreboardService;
+    protected StatisticsService $stats;
+    protected EntityManagerInterface $em;
 
     public function __construct(
         DOMJudgeService $dj,
@@ -71,7 +51,6 @@ class PublicController extends BaseController
 
     /**
      * @Route("", name="public_index")
-     * @throws Exception
      */
     public function scoreboardAction(Request $request): Response
     {
@@ -85,10 +64,10 @@ class PublicController extends BaseController
             $refreshParams = [
                 'static' => 1,
             ];
-            // For static scoreboards, allow to pass a contest= param
+            // For static scoreboards, allow to pass a contest= param.
             if ($contestId = $request->query->get('contest')) {
                 if ($contestId === 'auto') {
-                    // Automatically detect the contest that is activated the latest
+                    // Automatically detect the contest that is activated the latest.
                     $contest      = null;
                     $activateTime = null;
                     foreach ($this->dj->getCurrentContests(-1) as $possibleContest) {
@@ -101,7 +80,7 @@ class PublicController extends BaseController
                         }
                     }
                 } else {
-                    // Find the contest with the given ID
+                    // Find the contest with the given ID.
                     $contest = null;
                     foreach ($this->dj->getCurrentContests(-1) as $possibleContest) {
                         if ($possibleContest->getCid() === $contestId || $possibleContest->getExternalid() === $contestId) {
@@ -153,11 +132,14 @@ class PublicController extends BaseController
 
     /**
      * @Route("/team/{teamId<\d+>}", name="public_team")
-     * @throws Exception
      */
     public function teamAction(Request $request, int $teamId): Response
     {
+        /** @var Team|null $team */
         $team             = $this->em->getRepository(Team::class)->find($teamId);
+        if ($team && $team->getCategory() && !$team->getCategory()->getVisible()) {
+            $team = null;
+        }
         $showFlags        = (bool)$this->config->get('show_flags');
         $showAffiliations = (bool)$this->config->get('show_affiliations');
         $data             = [
@@ -176,14 +158,12 @@ class PublicController extends BaseController
     /**
      * @Route("/problems", name="public_problems")
      * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function problemsAction(): Response
     {
         return $this->render('public/problems.html.twig',
             $this->dj->getTwigDataForProblemsAction(-1, $this->stats));
     }
-
 
     /**
      * @Route("/problems/{probId<\d+>}/text", name="public_problem_text")

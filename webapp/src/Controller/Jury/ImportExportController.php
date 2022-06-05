@@ -8,19 +8,19 @@ use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Problem;
 use App\Entity\TeamCategory;
-use App\Form\Type\ICPCCmsType;
 use App\Form\Type\ContestExportType;
 use App\Form\Type\ContestImportType;
+use App\Form\Type\ICPCCmsType;
 use App\Form\Type\JsonImportType;
 use App\Form\Type\ProblemsImportType;
 use App\Form\Type\ProblemUploadType;
 use App\Form\Type\TsvImportType;
-use App\Service\ICPCCmsService;
-use App\Service\ImportProblemService;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
+use App\Service\ICPCCmsService;
 use App\Service\ImportExportService;
+use App\Service\ImportProblemService;
 use App\Service\ScoreboardService;
 use App\Utils\Scoreboard\Filter;
 use App\Utils\Utils;
@@ -29,13 +29,18 @@ use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
+use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 /**
  * @Route("/jury/import-export")
@@ -43,48 +48,15 @@ use Symfony\Component\Yaml\Yaml;
  */
 class ImportExportController extends BaseController
 {
-    /**
-     * @var ICPCCmsService
-     */
-    protected $icpcCmsService;
-
-    /**
-     * @var ImportExportService
-     */
-    protected $importExportService;
-
-    /**
-     * @var ImportProblemService
-     */
-    protected $importProblemService;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /** @var string */
-    protected $domjudgeVersion;
+    protected ICPCCmsService $icpcCmsService;
+    protected ImportExportService $importExportService;
+    protected ImportProblemService $importProblemService;
+    protected EntityManagerInterface $em;
+    protected ScoreboardService $scoreboardService;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
+    protected string $domjudgeVersion;
 
     public function __construct(
         ICPCCmsService $icpcCmsService,
@@ -110,9 +82,13 @@ class ImportExportController extends BaseController
 
     /**
      * @Route("", name="jury_import_export")
-     * @throws Exception
+     * @throws ClientExceptionInterface
+     * @throws DecodingExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws TransportExceptionInterface
      */
-    public function indexAction(Request $request) : Response
+    public function indexAction(Request $request): Response
     {
         $tsvForm = $this->createForm(TsvImportType::class);
 
@@ -185,6 +161,8 @@ class ImportExportController extends BaseController
             $newProblem = null;
             /** @var Contest|null $contest */
             $contest = $problemFormData['contest'] ?? null;
+            /** @var bool $deleteOldData */
+            $deleteOldData = $problemFormData['delete_old_data'] ?? false;
             if ($contest === null) {
                 $contestId = null;
             } else {
@@ -200,11 +178,8 @@ class ImportExportController extends BaseController
                 } else {
                     $contest = $this->em->getRepository(Contest::class)->find($contestId);
                 }
-                // Check if the problem exists, since if it does, we need to load it
-                $externalId = preg_replace('/[^a-zA-Z0-9-_]/', '', basename($clientName, '.zip'));
-                $existingProblem = $this->em->getRepository(Problem::class)->findOneBy(['externalid' => $externalId]);
                 $newProblem = $this->importProblemService->importZippedProblem(
-                    $zip, $clientName, $existingProblem, $contest, $messages
+                    $zip, $clientName, null, $contest, $deleteOldData, $messages
                 );
                 $allMessages = array_merge($allMessages, $messages);
                 if ($newProblem) {
@@ -260,7 +235,12 @@ class ImportExportController extends BaseController
         if ($contestImportForm->isSubmitted() && $contestImportForm->isValid()) {
             /** @var UploadedFile $file */
             $file = $contestImportForm->get('file')->getData();
-            $data = Yaml::parseFile($file->getRealPath(), Yaml::PARSE_DATETIME);
+            try {
+                $data = Yaml::parseFile($file->getRealPath(), Yaml::PARSE_DATETIME);
+            } catch (ParseException $e) {
+                $this->addFlash('danger', "Parse error in YAML/JSON file: " . $e->getMessage());
+                return $this->redirectToRoute('jury_import_export');
+            }
             if ($this->importExportService->importContestData($data, $message, $cid)) {
                 $this->addFlash('success',
                                 sprintf('The file %s is successfully imported.', $file->getClientOriginalName()));
@@ -277,7 +257,12 @@ class ImportExportController extends BaseController
         if ($problemsImportForm->isSubmitted() && $problemsImportForm->isValid()) {
             /** @var UploadedFile $file */
             $file = $problemsImportForm->get('file')->getData();
-            $data = Yaml::parseFile($file->getRealPath(), Yaml::PARSE_DATETIME);
+            try {
+                $data = Yaml::parseFile($file->getRealPath(), Yaml::PARSE_DATETIME);
+            } catch (ParseException $e) {
+                $this->addFlash('danger', "Parse error in YAML/JSON file: " . $e->getMessage());
+                return $this->redirectToRoute('jury_import_export');
+            }
             if ($this->importExportService->importProblemsData($problemsImportForm->get('contest')->getData(), $data)) {
                 $this->addFlash('success',
                     sprintf('The file %s is successfully imported.', $file->getClientOriginalName()));
@@ -318,10 +303,8 @@ class ImportExportController extends BaseController
 
     /**
      * @Route("/export/{type<groups|teams|results>}.tsv", name="jury_tsv_export")
-     * @return RedirectResponse|StreamedResponse
-     * @throws Exception
      */
-    public function exportTsvAction(Request $request, string $type)
+    public function exportTsvAction(Request $request, string $type): Response
     {
         $data    = [];
         $version = 1;
@@ -348,9 +331,7 @@ class ImportExportController extends BaseController
             echo sprintf("%s\t%s\n", $type, $version);
             // output the rows, escaping any reserved characters in the data
             foreach ($data as $row) {
-                echo implode("\t", array_map(function ($field) {
-                    return Utils::toTsvField((string)$field);
-                }, $row)) . "\n";
+                echo implode("\t", array_map(fn($field) => Utils::toTsvField((string)$field), $row)) . "\n";
             }
         });
         $filename = sprintf('%s.tsv', $type);
@@ -361,16 +342,14 @@ class ImportExportController extends BaseController
     }
 
     /**
-     * @Route("/export/{type<results|results-icpc|clarifications>}.html", name="jury_html_export")
-     * @throws Exception
+     * @Route("/export/{type<results|clarifications>}.html", name="jury_html_export")
      */
-    public function exportHtmlAction(Request $request, string $type) : Response
+    public function exportHtmlAction(Request $request, string $type): Response
     {
         try {
             switch ($type) {
                 case 'results':
-                case 'results-icpc':
-                    return $this->getResultsHtml($request, $type === 'results-icpc');
+                    return $this->getResultsHtml($request);
                 case 'clarifications':
                     return $this->getClarificationsHtml();
                 default:
@@ -383,10 +362,7 @@ class ImportExportController extends BaseController
         }
     }
 
-    /**
-     * @throws Exception
-     */
-    protected function getResultsHtml(Request $request, bool $useIcpcLayout) : Response
+    protected function getResultsHtml(Request $request): Response
     {
         /** @var TeamCategory[] $categories */
         $categories  = $this->em->createQueryBuilder()
@@ -455,12 +431,17 @@ class ImportExportController extends BaseController
             }
         }
 
-        usort($regionWinners, function ($a, $b) {
-            return $a['group'] <=> $b['group'];
-        });
+        usort($regionWinners, fn($a, $b) => $a['group'] <=> $b['group']);
 
         $collator = new Collator('en_US');
         $collator->sort($honorable);
+        usort($ranked, function(array $a, array $b) use ($collator): int {
+            if ($a['rank'] !== $b['rank']) {
+                return $a['rank'] <=> $b['rank'];
+            }
+
+            return $collator->compare($a['team'], $b['team']);
+        });
 
         $problems     = $scoreboard->getProblems();
         $matrix       = $scoreboard->getMatrix();
@@ -514,11 +495,7 @@ class ImportExportController extends BaseController
             'download' => $request->query->getBoolean('download'),
             'sortOrder' => $sortOrder,
         ];
-        if ($useIcpcLayout) {
-            $response = $this->render('jury/export/results_icpc.html.twig', $data);
-        } else {
-            $response = $this->render('jury/export/results.html.twig', $data);
-        }
+        $response = $this->render('jury/export/results.html.twig', $data);
 
         if ($request->query->getBoolean('download')) {
             $response->headers->set('Content-disposition', 'attachment; filename=results.html');
@@ -527,10 +504,7 @@ class ImportExportController extends BaseController
         return $response;
     }
 
-    /**
-     * @throws Exception
-     */
-    protected function getClarificationsHtml() : Response
+    protected function getClarificationsHtml(): Response
     {
         $contest = $this->dj->getCurrentContest();
         if ($contest === null) {
@@ -556,7 +530,7 @@ class ImportExportController extends BaseController
             ->leftJoin('c.problem', 'p')
             ->select('c')
             ->andWhere('c.contest = :contest')
-            ->setParameter(':contest', $contest)
+            ->setParameter('contest', $contest)
             ->addOrderBy('c.category')
             ->addOrderBy('p.probid')
             ->addOrderBy('c.submittime')
@@ -582,7 +556,7 @@ class ImportExportController extends BaseController
             ->from(ContestProblem::class, 'cp')
             ->select('cp')
             ->andWhere('cp.contest = :contest')
-            ->setParameter(':contest', $contest)
+            ->setParameter('contest', $contest)
             ->getQuery()
             ->getResult();
         $contestProblemsIndexed = [];

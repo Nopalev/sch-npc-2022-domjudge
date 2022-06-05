@@ -9,29 +9,26 @@ use Doctrine\ORM\Mapping as ORM;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="balloon",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Balloons to be handed out"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Balloons to be handed out"},
  *     indexes={@ORM\Index(name="submitid", columns={"submitid"})}
  *     )
  */
 class Balloon
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", length=4, name="balloonid",
      *     options={"comment"="Balloon ID", "unsigned"=true}, nullable=false)
      */
-    private $balloonid;
+    private int $balloonid;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="done",
      *     options={"comment"="Has been handed out yet?","default"="0"},
      *     nullable=false)
      */
-    private $done = false;
+    private bool $done = false;
 
     /**
      * @ORM\ManyToOne(targetEntity="Submission", inversedBy="balloons")
@@ -50,7 +47,7 @@ class Balloon
         return $this;
     }
 
-    public function getDone()
+    public function getDone(): bool
     {
         return $this->done;
     }

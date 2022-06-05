@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="submission_file",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Files associated to a submission"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Files associated to a submission"},
  *     indexes={@ORM\Index(name="submitid", columns={"submitid"})},
  *     uniqueConstraints={
  *         @ORM\UniqueConstraint(name="rankindex", columns={"submitid", "ranknumber"}),
@@ -20,42 +20,37 @@ use Doctrine\ORM\Mapping as ORM;
 class SubmissionFile
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="submitfileid", length=4,
      *     options={"comment"="Submission file ID","unsigned"=true},
      *     nullable=false)
      */
-    private $submitfileid;
+    private int $submitfileid;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="filename", length=255, options={"comment"="Filename as submitted"}, nullable=false)
      */
-    private $filename;
+    private string $filename;
 
     /**
-     * @var int
      * @ORM\Column(type="integer", name="ranknumber",
      *     options={"comment"="Order of the submission files, zero-indexed", "unsigned"=true},
      *     nullable=false)
      */
-    private $ranknumber;
+    private int $ranknumber;
 
     /**
      * @ORM\ManyToOne(targetEntity="Submission", inversedBy="files")
      * @ORM\JoinColumn(name="submitid", referencedColumnName="submitid", onDelete="CASCADE")
      */
-    private $submission;
+    private Submission $submission;
 
     /**
-     * @var string
      * @ORM\Column(type="blobtext", name="sourcecode", length=4294967295,
      *     options={"comment"="Full source code"}, nullable=false)
      */
-    private $sourcecode;
+    private string $sourcecode;
 
     public function getSubmitfileid(): int
     {

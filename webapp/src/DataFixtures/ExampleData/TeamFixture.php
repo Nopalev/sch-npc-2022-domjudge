@@ -10,13 +10,11 @@ class TeamFixture extends AbstractExampleDataFixture implements DependentFixture
 {
     public const TEAM_REFERENCE = 'team';
 
-    /**
-     * @inheritDoc
-     */
-    public function load(ObjectManager $manager)
+    public function load(ObjectManager $manager): void
     {
         $team = new Team();
         $team
+            ->setExternalid('exteam')
             ->setIcpcid('exteam')
             ->setName('Example teamname')
             ->setAffiliation($this->getReference(TeamAffiliationFixture::AFFILIATION_REFERENCE))
@@ -28,10 +26,7 @@ class TeamFixture extends AbstractExampleDataFixture implements DependentFixture
         $this->addReference(self::TEAM_REFERENCE, $team);
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getDependencies()
+    public function getDependencies(): array
     {
         return [TeamAffiliationFixture::class, TeamCategoryFixture::class];
     }

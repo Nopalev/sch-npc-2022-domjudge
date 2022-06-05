@@ -2,7 +2,6 @@
 
 namespace App\Service;
 
-use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Executable;
 use App\Entity\Language;
@@ -16,8 +15,8 @@ use App\Utils\Utils;
 use BadMethodCallException;
 use Doctrine\Inflector\InflectorFactory;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\RouterInterface;
-use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
@@ -26,45 +25,14 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
  */
 class CheckConfigService
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var ValidatorInterface
-     */
-    protected $validator;
-
-    /**
-     * @var RouterInterface
-     */
-    protected $router;
-
-    /**
-     * @var bool
-     */
-    protected $debug;
-
-    /**
-     * @var UserPasswordEncoderInterface
-     */
-    protected $passwordEncoder;
+    protected EntityManagerInterface $em;
+    protected ConfigurationService $config;
+    protected DOMJudgeService $dj;
+    protected EventLogService $eventLogService;
+    protected ValidatorInterface $validator;
+    protected RouterInterface $router;
+    protected bool $debug;
+    protected UserPasswordHasherInterface $passwordHasher;
 
     public function __construct(
         bool $debug,
@@ -74,7 +42,7 @@ class CheckConfigService
         EventLogService $eventLogService,
         RouterInterface $router,
         ValidatorInterface $validator,
-        UserPasswordEncoderInterface $passwordEncoder
+        UserPasswordHasherInterface $passwordHasher
     ) {
         $this->debug           = $debug;
         $this->em              = $em;
@@ -83,10 +51,10 @@ class CheckConfigService
         $this->eventLogService = $eventLogService;
         $this->router          = $router;
         $this->validator       = $validator;
-        $this->passwordEncoder = $passwordEncoder;
+        $this->passwordHasher  = $passwordHasher;
     }
 
-    public function runAll() : array
+    public function runAll(): array
     {
         $results = [];
 
@@ -139,29 +107,20 @@ class CheckConfigService
         return $results;
     }
 
-    public function checkPhpVersion() : array
+    public function checkPhpVersion(): array
     {
         $my = PHP_VERSION;
-        $req = '7.2.5';
+        $req = '7.4.0';
         $result = version_compare($my, $req, '>=');
         return ['caption' => 'PHP version',
                 'result' => ($result ? 'O' : 'E'),
                 'desc' => sprintf('You have PHP version %s. The minimum required is %s', $my, $req)];
     }
 
-    public function checkPhpExtensions() : array
+    public function checkPhpExtensions(): array
     {
         $required = ['json', 'mbstring', 'mysqli', 'zip', 'gd', 'intl'];
-        $optional = [];
-
         $state = 'O'; $remark = '';
-        foreach ($optional as $ext => $why) {
-            if (!extension_loaded($ext)) {
-                $state = 'W';
-                $remark .= sprintf("Optional PHP extension '%s' not loaded; needed for %s\n",
-                    $ext, $why);
-            }
-        }
         foreach ($required as $ext) {
             if (!extension_loaded($ext)) {
                 $state = 'E';
@@ -175,7 +134,7 @@ class CheckConfigService
                 'desc' => $remark];
     }
 
-    public function checkPhpSettings() : array
+    public function checkPhpSettings(): array
     {
         $sourcefiles_limit = $this->config->get('sourcefiles_limit');
         $max_files = ini_get('max_file_uploads');
@@ -196,7 +155,7 @@ class CheckConfigService
         $sizes = [];
         $postmaxvars = ['post_max_size', 'memory_limit', 'upload_max_filesize'];
         foreach ($postmaxvars as $var) {
-            /* skip 0 or empty values, and -1 which means 'unlimited' */
+            // Skip 0 or empty values, and -1 which means 'unlimited'.
             if ($size = Utils::phpiniToBytes(ini_get($var))) {
                 if ($size != '-1') {
                     $sizes[$var] = $size;
@@ -219,9 +178,9 @@ class CheckConfigService
                 'desc' => $desc];
     }
 
-    public function checkMysqlSettings() : array
+    public function checkMysqlSettings(): array
     {
-        $r = $this->em->getConnection()->fetchAll(
+        $r = $this->em->getConnection()->fetchAllAssociative(
             'SHOW variables WHERE Variable_name IN
                  ("innodb_log_file_size", "max_connections", "max_allowed_packet",
                   "tx_isolation", "transaction_isolation")'
@@ -234,7 +193,7 @@ class CheckConfigService
         if (isset($vars['transaction_isolation'])) {
             $vars['tx_isolation'] = $vars['transaction_isolation'];
         }
-        $max_inout_r = $this->em->getConnection()->fetchAll('SELECT GREATEST(MAX(LENGTH(input)),MAX(LENGTH(output))) as max FROM testcase_content');
+        $max_inout_r = $this->em->getConnection()->fetchAllAssociative('SELECT GREATEST(MAX(LENGTH(input)),MAX(LENGTH(output))) as max FROM testcase_content');
         $max_inout = (int)reset($max_inout_r)['max'];
 
         $result = 'O';
@@ -269,7 +228,7 @@ class CheckConfigService
                 'desc' => $desc ?: 'MySQL settings are all ok'];
     }
 
-    public function checkAdminPass() : array
+    public function checkAdminPass(): array
     {
         $res = 'O';
         $desc = 'Password for "admin" has been changed from the default.';
@@ -286,7 +245,7 @@ class CheckConfigService
                 'desc' => $desc];
     }
 
-    public function checkDefaultCompareRunExist() : array
+    public function checkDefaultCompareRunExist(): array
     {
         $res = 'O';
         $desc = '';
@@ -307,7 +266,7 @@ class CheckConfigService
                 'desc' => $desc];
     }
 
-    public function checkScriptFilesizevsMemoryLimit() : array
+    public function checkScriptFilesizevsMemoryLimit(): array
     {
         if ($this->config->get('script_filesize_limit') <=
             $this->config->get('memory_limit')) {
@@ -325,7 +284,7 @@ class CheckConfigService
             ];
     }
 
-    public function checkDebugDisabled() : array
+    public function checkDebugDisabled(): array
     {
         if ($this->debug) {
             return ['caption' => 'Debugging',
@@ -337,7 +296,7 @@ class CheckConfigService
                 'desc' => 'Debugging disabled.'];
     }
 
-    public function checkTmpdirWritable() : array
+    public function checkTmpdirWritable(): array
     {
         $tmpdir = $this->dj->getDomjudgeTmpDir();
         if (is_writable($tmpdir)) {
@@ -354,7 +313,7 @@ class CheckConfigService
                  $tmpdir)];
     }
 
-    private function randomString(int $length) : string
+    private function randomString(int $length): string
     {
         $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
         $charactersLength = strlen($characters);
@@ -365,7 +324,7 @@ class CheckConfigService
         return $randomString;
     }
 
-    public function checkHashTime() : array
+    public function checkHashTime(): array
     {
         $tmp_user = new User();
         $counter = 0;
@@ -373,7 +332,7 @@ class CheckConfigService
         $time_start = microtime(true);
         do {
             $plainPassword = $this->randomString(12);
-            $this->passwordEncoder->encodePassword($tmp_user, $plainPassword);
+            $this->passwordHasher->hashPassword($tmp_user, $plainPassword);
             $time_end = microtime(true);
             $counter++;
         } while (($time_end - $time_start) < $time_duration_sample);
@@ -393,7 +352,7 @@ class CheckConfigService
             'desc' => sprintf('Hashing cost is reasonable (Did %d hashes).', $counter)];
     }
 
-    public function checkContestActive() : array
+    public function checkContestActive(): array
     {
         $contests = $this->dj->getCurrentContests();
         if (empty($contests)) {
@@ -404,14 +363,15 @@ class CheckConfigService
         return ['caption' => 'Active contests',
                 'result' => 'O',
                 'desc' => 'Currently active contests: ' .
-                    implode(', ', array_map(function ($contest) {
-                        return 'c'.$contest->getCid() . ' (' . $contest->getShortname() . ')';
-                    }, $contests))];
+                    implode(', ', array_map(
+                        fn($contest) => 'c' . $contest->getCid() . ' (' . $contest->getShortname() . ')',
+                        $contests
+                    ))];
     }
 
-    public function checkContestsValidate() : array
+    public function checkContestsValidate(): array
     {
-        // Fetch all active and future contests
+        // Fetch all active and future contests.
         $contests = $this->dj->getCurrentContests(null, true);
 
         $contesterrors = $cperrors = [];
@@ -445,10 +405,9 @@ class CheckConfigService
                     ($desc ?: 'No problems found.')];
     }
 
-    public function checkContestBanners() : array
+    public function checkContestBanners(): array
     {
-        // Fetch all active and future contests
-        /** @var Contest[] $contests */
+        // Fetch all active and future contests.
         $contests = $this->dj->getCurrentContests(null, true);
 
         $desc = '';
@@ -482,13 +441,13 @@ class CheckConfigService
                 'desc' => $desc];
     }
 
-    public function checkProblemsValidate() : array
+    public function checkProblemsValidate(): array
     {
         $problems = $this->em->getRepository(Problem::class)->findAll();
         $script_filesize_limit = $this->config->get('script_filesize_limit');
         $output_limit = $this->config->get('output_limit');
 
-        $problemerrors = $scripterrors = [];
+        $problemerrors = $moreproblemerrors = [];
         $result = 'O';
         foreach ($problems as $problem) {
             $probid = $problem->getProbid();
@@ -531,7 +490,7 @@ class CheckConfigService
                 ->from(Testcase::class, 'tc')
                 ->join('tc.content', 'tcc')
                 ->andWhere('tc.problem = :probid')
-                ->setParameter(':probid', $probid)
+                ->setParameter('probid', $probid)
                 ->getQuery()
                 ->getResult();
             if (count($tcs_size) === 0) {
@@ -568,11 +527,11 @@ class CheckConfigService
                     ($desc ?: 'No problems with problems found.')];
     }
 
-    public function checkLanguagesValidate() : array
+    public function checkLanguagesValidate(): array
     {
         $languages = $this->em->getRepository(Language::class)->findAll();
 
-        $languageerrors = $scripterrors = [];
+        $languageerrors = $morelanguageerrors = [];
         $result = 'O';
         foreach ($languages as $language) {
             $langid = $language->getLangid();
@@ -616,7 +575,7 @@ class CheckConfigService
                     ($desc ?: 'No languages with problems found.')];
     }
 
-    public function checkTeamPhotos() : array
+    public function checkTeamPhotos(): array
     {
         /** @var Team[] $teams */
         $teams = $this->em->getRepository(Team::class)->findAll();
@@ -640,7 +599,7 @@ class CheckConfigService
                 'desc' => $desc];
     }
 
-    public function checkAffiliations() : array
+    public function checkAffiliations(): array
     {
         $show_logos = $this->config->get('show_affiliation_logos');
 
@@ -656,34 +615,33 @@ class CheckConfigService
         $result = 'O';
         $desc = '';
         foreach ($affils as $affiliation) {
-            // don't care about unused affiliations
+            // Only check affiliations that are used, i.e. where there is at least one team.
             if (count($affiliation->getTeams()) === 0) {
                 continue;
             }
-            if ($show_logos) {
-                if ($aid = $affiliation->getApiId($this->eventLogService)) {
-                    $logopath = $this->dj->assetPath($aid, 'affiliation', true);
-                    $logopathMask = str_replace('.jpg', '.{jpg,png,svg}', $this->dj->assetPath($aid, 'affiliation', true, 'jpg'));
-                    if (!$logopath) {
+
+            if ($aid = $affiliation->getApiId($this->eventLogService)) {
+                $logopath = $this->dj->assetPath($aid, 'affiliation', true);
+                $logopathMask = str_replace('.jpg', '.{jpg,png,svg}', $this->dj->assetPath($aid, 'affiliation', true, 'jpg'));
+                if (!$logopath) {
+                    $result = 'W';
+                    $desc   .= sprintf("Logo for %s does not exist (looking for %s)\n", $affiliation->getShortname(), $logopathMask);
+                } elseif (!is_readable($logopath)) {
+                    $result = 'W';
+                    $desc .= sprintf("Logo for %s not readable (looking for %s)\n", $affiliation->getShortname(), $logopathMask);
+                } elseif (($filesize = filesize($logopath)) > 500 * 1024) {
+                    $result = 'W';
+                    $desc .= sprintf("Logo for %s bigger than 500Kb (size is %.2fKb)\n", $affiliation->getShortname(), $filesize / 1024);
+                } else {
+                    [$width, $height, $ratio] = Utils::getImageSize($logopath);
+                    if (mime_content_type($logopath) === 'image/svg+xml') {
+                        // For SVG's we check the ratio
                         $result = 'W';
-                        $desc   .= sprintf("Logo for %s does not exist (looking for %s)\n", $affiliation->getShortname(), $logopathMask);
-                    } elseif (!is_readable($logopath)) {
+                        $desc   .= sprintf("Logo for %s has a ratio of 1:%.2f, should be 1:1\n", $affiliation->getShortname(), $ratio);
+                    } elseif ($width !== 64 || $height !== 64) {
+                        // For other images we check the size
                         $result = 'W';
-                        $desc .= sprintf("Logo for %s not readable (looking for %s)\n", $affiliation->getShortname(), $logopathMask);
-                    } elseif (($filesize = filesize($logopath)) > 500 * 1024) {
-                        $result = 'W';
-                        $desc .= sprintf("Logo for %s bigger than 500Kb (size is %.2fKb)\n", $affiliation->getShortname(), $filesize / 1024);
-                    } else {
-                        [$width, $height, $ratio] = Utils::getImageSize($logopath);
-                        if (mime_content_type($logopath) === 'image/svg+xml') {
-                            // For SVG's we check the ratio
-                            $result = 'W';
-                            $desc   .= sprintf("Logo for %s has a ratio of 1:%.2f, should be 1:1\n", $affiliation->getShortname(), $ratio);
-                        } elseif ($width !== 64 || $height !== 64) {
-                            // For other images we check the size
-                            $result = 'W';
-                            $desc   .= sprintf("Logo for %s is not 64x64\n", $affiliation->getShortname());
-                        }
+                        $desc   .= sprintf("Logo for %s is not 64x64\n", $affiliation->getShortname());
                     }
                 }
             }
@@ -695,7 +653,7 @@ class CheckConfigService
             'desc' => $desc];
     }
 
-    public function checkTeamDuplicateNames() : array
+    public function checkTeamDuplicateNames(): array
     {
         $teams = $this->em->getRepository(Team::class)->findAll();
 
@@ -719,7 +677,7 @@ class CheckConfigService
             'desc' => $desc];
     }
 
-    public function checkSelfRegistration() : array
+    public function checkSelfRegistration(): array
     {
         $result = 'O';
         $desc = '';
@@ -748,9 +706,9 @@ class CheckConfigService
             'desc' => $desc];
     }
 
-    public function checkAllExternalIdentifiers() : array
+    public function checkAllExternalIdentifiers(): array
     {
-        // Get all entity classes
+        // Get all entity classes.
         $dir   = realpath(sprintf('%s/src/Entity', $this->dj->getDomjudgeWebappDir()));
         $files = glob($dir . '/*.php');
 
@@ -761,21 +719,21 @@ class CheckConfigService
             $shortClass = str_replace('.php', '', $parts[count($parts) - 1]);
             $class      = sprintf('App\\Entity\\%s', $shortClass);
             try {
-                if (class_exists($class) && !in_array($class, [
-                        // Contestproblem is checked using Problem
-                        ContestProblem::class,
-                    ]) && ($externalIdField = $this->eventLogService->externalIdFieldForEntity($class))) {
+                if (class_exists($class)
+                    // ContestProblem is checked using Problem.
+                    && $class != ContestProblem::class
+                    && ($externalIdField = $this->eventLogService->externalIdFieldForEntity($class))) {
                     $result[$shortClass] = $this->checkExternalIdentifiers($class, $externalIdField);
                 }
             } catch (BadMethodCallException $e) {
-                // Ignore, this entity does not have an API endpoint
+                // Ignore, this entity does not have an API endpoint.
             }
         }
 
         return $result;
     }
 
-    protected function checkExternalIdentifiers($class, $externalIdField) : array
+    protected function checkExternalIdentifiers(string $class, string $externalIdField): array
     {
         $parts      = explode('\\', $class);
         $entityType = $parts[count($parts) - 1];
@@ -785,7 +743,7 @@ class CheckConfigService
             ->from($class, 'e')
             ->select('e')
             ->andWhere(sprintf('e.%s IS NULL or e.%s = :empty', $externalIdField, $externalIdField))
-            ->setParameter(':empty', '')
+            ->setParameter('empty', '')
             ->getQuery()
             ->getResult();
 
@@ -799,13 +757,13 @@ class CheckConfigService
                 $route       = sprintf('jury_%s', $inflector->tableize($entityType));
                 $routeParams = [];
                 foreach ($metadata->getIdentifierColumnNames() as $column) {
-                    // By default the ID param is the same as the column but then with Id instead of id
+                    // By default, the ID param is the same as the column but then with Id instead of id.
                     $param = str_replace('id', 'Id', $column);
                     if ($param === 'cId') {
-                        // For contests we use contestId instead of cId
+                        // For contests we use contestId instead of cId.
                         $param = 'contestId';
                     } elseif ($param === 'clarId') {
-                        // For clarifications it is id instead of clarId
+                        // For clarifications it is id instead of clarId.
                         $param = 'id';
                     }
                     $getter              = sprintf('get%s', ucfirst($column));

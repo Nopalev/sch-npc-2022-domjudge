@@ -19,6 +19,12 @@
                     <th>ID</th>
                     <td>{{ team.teamid }}</td>
                 </tr>
+                {% if showExternalId(team) %}
+                    <tr>
+                        <th>External ID</th>
+                        <td>{{ team.externalid }}</td>
+                    </tr>
+                {% endif %}
                 <tr>
                     <th>ICPC ID</th>
                     <td>
@@ -47,7 +53,7 @@
                     <th>First login</th>
                     <td>
                         {% if team.users is not empty and team.users.first.firstLogin %}
-                            {{ team.users.first.firstLogin | printtime('%a %d %b %Y %T %Z') }}
+                            {{ team.users.first.firstLogin | printtime('D d M Y H:i:s T') }}
                         {% else %}
                             -
                         {% endif %}
@@ -143,23 +149,27 @@
                     </td>
                 </tr>
                 {% endif %}
-                {% if team.comments is not empty %}
+                {% if team.internalcomments is not empty %}
                 <tr>
-                    <th>Comments</th>
+                    <th>Internal comments (Jury only)</th>
                     <td>
-                        {{ team.comments | nl2br }}
+                        {{ team.internalcomments | nl2br }}
                     </td>
                 </tr>
                 {% endif %}
-                {% if team.members is not empty %}
+                {% if team.publicdescription is not empty %}
                     <tr>
-                        <th>Members</th>
-                        <td>{{ team.members | nl2br }}</td>
+                        <th>Description (Public)</th>
+                        <td>{{ team.publicdescription | nl2br }}</td>
                     </tr>
                 {% endif %}
             </table>
         </div>
-    {% set teamImage = team.teamId | assetPath('team') %}
+    {% set teamId = team.teamid %}
+    {% if showExternalId(team) %}
+        {% set teamId = team.externalid %}
+    {% endif %}
+    {% set teamImage = teamId | assetPath('team') %}
     {% if teamImage %}
         <div class="col">
         <img id="teampicture" src="{{ asset(teamImage) }}" alt="Picture of team {{ team.name }}"
@@ -168,14 +178,14 @@
     {% endif %}
     </div>
 
-    <p>
+    <div class="button-row">
         {%- if is_granted('ROLE_ADMIN') -%}
             {{ button(path('jury_team_edit', {'teamId': team.teamid}), 'Edit', 'primary', 'edit') }}
             {{ button(path('jury_team_delete', {'teamId': team.teamid}), 'Delete', 'danger', 'trash-alt', true) }}
         {% endif %}
         {{ button(path('jury_clarification_send', {'teamto': team.teamid}), 'Send message', 'secondary', 'envelope') }}
         {% include 'jury/partials/rejudge_form.html.twig' with {table: 'team', id: team.teamid, buttonClass: 'btn-secondary'} %}
-    </p>
+    </div>
 
     <div data-ajax-refresh-target>
         {% include 'jury/partials/team_score_and_submissions.html.twig' %}

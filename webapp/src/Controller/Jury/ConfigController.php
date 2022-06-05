@@ -8,11 +8,9 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use Doctrine\ORM\EntityManagerInterface;
-use Exception;
 use Psr\Log\LoggerInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
@@ -23,30 +21,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ConfigController extends AbstractController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var CheckConfigService
-     */
-    protected $checkConfigService;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
+    protected EntityManagerInterface $em;
+    protected LoggerInterface $logger;
+    protected DOMJudgeService $dj;
+    protected CheckConfigService $checkConfigService;
+    protected ConfigurationService $config;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -64,10 +43,8 @@ class ConfigController extends AbstractController
 
     /**
      * @Route("", name="jury_config")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function indexAction(EventLogService $eventLogService, Request $request)
+    public function indexAction(EventLogService $eventLogService, Request $request): Response
     {
         $specs = $this->config->getConfigSpecification();
         foreach ($specs as &$spec) {
@@ -142,7 +119,7 @@ class ConfigController extends AbstractController
     /**
      * @Route("/check", name="jury_config_check")
      */
-    public function checkAction(Request $request, string $projectDir, string $logsDir): Response
+    public function checkAction(string $projectDir, string $logsDir): Response
     {
         $results = $this->checkConfigService->runAll();
         return $this->render('jury/config_check.html.twig', [
@@ -157,7 +134,7 @@ class ConfigController extends AbstractController
     /**
      * @Route("/check/phpinfo", name="jury_config_phpinfo")
      */
-    public function phpinfoAction(Request $request): Response
+    public function phpinfoAction(): Response
     {
         ob_start();
         phpinfo();

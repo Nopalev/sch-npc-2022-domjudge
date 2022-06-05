@@ -1,5 +1,5 @@
 visual_pr:
-  extends: [.mariadb_job,.long_job]
+  extends: [.mariadb_job,.long_job,.cached_vendor]
   stage: visual_pre
   variables:
     MYSQL_ROOT_PASSWORD: password
@@ -12,6 +12,7 @@ visual_pr:
       - URL: public
         ROLE: [none,jury,admin,balloon,team]
   script:
+    - set -eux
     - git fetch
     - git config --global user.email "never@commits.ci"
     - git config --global user.name "Rebase against main"
@@ -26,10 +27,9 @@ visual_pr:
       - screenshotspr
       - html
       - wget.log
-      - duration
 
 visual_main:
-  extends: [.mariadb_job,.long_job]
+  extends: [.mariadb_job,.long_job,.cached_vendor]
   stage: visual_pre
   variables:
     MYSQL_ROOT_PASSWORD: password
@@ -42,6 +42,7 @@ visual_main:
       - URL: public
         ROLE: [none,jury,admin,balloon,team]
   script:
+    - set -eux
     - git fetch
     - git checkout -B main origin/main
     - git branch --set-upstream-to=origin/main main
@@ -56,7 +57,6 @@ visual_main:
     paths:
       - screenshotsmain
       - html
-      - duration
 
 visual_compare:
   extends: [.normal_job]
@@ -71,4 +71,3 @@ visual_compare:
     paths:
       - visualchanges
       - addrem.log
-      - duration

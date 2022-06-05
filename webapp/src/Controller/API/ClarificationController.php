@@ -103,7 +103,6 @@ class ClarificationController extends AbstractRestController
      *     @Model(type=Clarification::class)
      * )
      * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function addAction(Request $request, ?string $id): Response
     {
@@ -134,8 +133,8 @@ class ClarificationController extends AbstractRestController
                     $this->eventLogService->externalIdFieldForEntity(Problem::class) ?? 'probid'))
                 ->andWhere('cp.contest = :contest')
                 ->andWhere('cp.allowSubmit = 1')
-                ->setParameter(':problem', $problemId)
-                ->setParameter(':contest', $contestId)
+                ->setParameter('problem', $problemId)
+                ->setParameter('contest', $contestId)
                 ->getQuery()
                 ->getOneOrNullResult();
 
@@ -148,7 +147,7 @@ class ClarificationController extends AbstractRestController
         }
 
         if ($replyToId = $request->request->get('reply_to_id')) {
-            // Load the clarification
+            // Load the clarification.
             /** @var Clarification $replyTo */
             $replyTo = $this->em->createQueryBuilder()
                 ->from(Clarification::class, 'c')
@@ -156,8 +155,8 @@ class ClarificationController extends AbstractRestController
                 ->andWhere(sprintf('c.%s = :clarification',
                     $this->eventLogService->externalIdFieldForEntity(Clarification::class) ?? 'clarid'))
                 ->andWhere('c.contest = :contest')
-                ->setParameter(':clarification', $replyToId)
-                ->setParameter(':contest', $contestId)
+                ->setParameter('clarification', $replyToId)
+                ->setParameter('contest', $contestId)
                 ->getQuery()
                 ->getOneOrNullResult();
 
@@ -189,12 +188,12 @@ class ClarificationController extends AbstractRestController
 
         $clarification->setSender($fromTeam);
 
-        // By default, send to jury
+        // By default, send to jury.
         $toTeam = null;
         if ($toTeamId = $request->request->get('to_team_id')) {
             $idField = $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid';
 
-            // If the user is an admin or API writer, allow it to specify the team
+            // If the user is an admin or API writer, allow it to specify the team.
             if ($this->isGranted('ROLE_API_WRITER')) {
                 $toTeam = $this->dj->loadTeam($idField, $toTeamId, $contest);
             } else {
@@ -235,8 +234,8 @@ class ClarificationController extends AbstractRestController
                     ->select('c')
                     ->andWhere('(c.externalid IS NULL AND c.clarid = :clarid) OR c.externalid = :clarid')
                     ->andWhere('c.contest = :contest')
-                    ->setParameter(':clarid', $clarificationId)
-                    ->setParameter(':contest', $contestId)
+                    ->setParameter('clarid', $clarificationId)
+                    ->setParameter('contest', $contestId)
                     ->getQuery()
                     ->getOneOrNullResult();
                 if ($existingClarification !== null) {
@@ -256,14 +255,14 @@ class ClarificationController extends AbstractRestController
             $clarification->setCategory(reset($clarificationCategoryNames));
         }
 
-        // We are ready to save the clarification
+        // We are ready to save the clarification.
         $this->em->persist($clarification);
         $this->em->flush();
 
         $this->dj->auditlog('clarification', $clarification->getClarid(), 'added', null, null, $contestId);
         $this->eventLogService->log('clarification', $clarification->getClarid(), 'create', $contestId);
 
-        // Refresh the clarification since the event log service will have unloaded it
+        // Refresh the clarification since the event log service will have unloaded it.
         $clarification = $this->em->getRepository(Clarification::class)->find($clarification->getClarid());
 
         if ($clarification->getRecipient()) {
@@ -279,9 +278,6 @@ class ClarificationController extends AbstractRestController
         return $this->renderData($request, $clarification);
     }
 
-    /**
-     * @inheritdoc
-     */
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
         $queryBuilder = $this->em->createQueryBuilder()
@@ -293,7 +289,7 @@ class ClarificationController extends AbstractRestController
             ->leftJoin('clar.problem', 'p')
             ->select('clar, c, r, reply, p')
             ->andWhere('clar.contest = :cid')
-            ->setParameter(':cid', $this->getContestId($request));
+            ->setParameter('cid', $this->getContestId($request));
 
         if (!$this->dj->checkrole('api_reader') &&
             !$this->dj->checkrole('judgehost'))
@@ -301,7 +297,7 @@ class ClarificationController extends AbstractRestController
             if ($this->dj->checkrole('team')) {
                 $queryBuilder
                     ->andWhere('clar.sender = :team OR clar.recipient = :team OR (clar.sender IS NULL AND clar.recipient IS NULL)')
-                    ->setParameter(':team', $this->dj->getUser()->getTeam());
+                    ->setParameter('team', $this->dj->getUser()->getTeam());
             } else {
                 $queryBuilder
                     ->andWhere('clar.sender IS NULL')
@@ -312,15 +308,12 @@ class ClarificationController extends AbstractRestController
         if ($request->query->has('problem')) {
             $queryBuilder
                 ->andWhere('clar.probid = :problem')
-                ->setParameter(':problem', $request->query->get('problem'));
+                ->setParameter('problem', $request->query->get('problem'));
         }
 
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('clar.%s', $this->eventLogService->externalIdFieldForEntity(Clarification::class) ?? 'clarid');

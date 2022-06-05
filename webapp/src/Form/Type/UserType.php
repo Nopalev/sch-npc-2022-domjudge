@@ -5,11 +5,9 @@ namespace App\Form\Type;
 use App\Entity\Role;
 use App\Entity\Team;
 use App\Entity\User;
-use Doctrine\Common\Collections\ArrayCollection;
+use App\Service\EventLogService;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\EntityRepository;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
-use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\EmailType;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
@@ -20,25 +18,19 @@ use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
-class UserType extends AbstractType
+class UserType extends AbstractExternalIdEntityType
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
 
-    /**
-     * UserType constructor.
-     *
-     * @param EntityManagerInterface $em
-     */
-    public function __construct(EntityManagerInterface $em)
+    public function __construct(EntityManagerInterface $em, EventLogService $eventLogService)
     {
+        parent::__construct($eventLogService);
         $this->em = $em;
     }
 
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
+        $this->addExternalIdField($builder, Team::class);
         /** @var Team[] $teams */
         $teams = $this->em->createQueryBuilder()
             ->from(Team::class, 't', 't.teamid')
@@ -106,7 +98,7 @@ class UserType extends AbstractType
         });
     }
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => User::class]);
     }

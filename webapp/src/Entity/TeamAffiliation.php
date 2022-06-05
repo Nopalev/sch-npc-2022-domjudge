@@ -16,15 +16,10 @@ use Symfony\Component\Validator\Constraints as Assert;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="team_affiliation",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Affilitations for teams (e.g.: university, company)"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Affilitations for teams (e.g.: university, company)"},
  *     uniqueConstraints={
  *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths": {190}}),
  *     })
- * @Serializer\VirtualProperty(
- *     "icpcId",
- *     exp="object.getAffilid()",
- *     options={@Serializer\Type("string")}
- * )
  * @Serializer\VirtualProperty(
  *     "shortName",
  *     exp="object.getShortname()",
@@ -35,7 +30,6 @@ use Symfony\Component\Validator\Constraints as Assert;
 class TeamAffiliation extends BaseApiEntity implements AssetEntityInterface
 {
     /**
-     * @var int
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="affilid", length=4,
@@ -44,71 +38,73 @@ class TeamAffiliation extends BaseApiEntity implements AssetEntityInterface
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
-    protected $affilid;
+    protected ?int $affilid = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="externalid", length=255,
      *     options={"comment"="Team affiliation ID in an external system",
      *              "collation"="utf8mb4_bin"},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    protected $externalid;
+    protected ?string $externalid = null;
 
     /**
-     * @var string
+     * @ORM\Column(type="string", name="icpcid", length=255,
+     *     options={"comment"="External identifier from ICPC CMS",
+     *              "collation"="utf8mb4_bin"},
+     *     nullable=true)
+     * @Serializer\SerializedName("icpc_id")
+     */
+    protected ?string $icpcid = null;
+
+    /**
      * @ORM\Column(type="string", name="shortname", length=32,
      *     options={"comment"="Short descriptive name"}, nullable=false)
      * @Serializer\SerializedName("name")
      */
-    private $shortname;
+    private string $shortname;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="name", length=255,
      *     options={"comment"="Descriptive name"}, nullable=false)
      * @Serializer\SerializedName("formal_name")
      */
-    private $name;
+    private string $name;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=3, name="country",
      *     options={"comment"="ISO 3166-1 alpha-3 country code","fixed"=true},
      *     nullable=true)
      * @Serializer\Expose(if="context.getAttribute('config_service').get('show_flags')")
      * @Country()
      */
-    private $country;
+    private ?string $country;
 
     /**
-     * @var UploadedFile|null
      * @Assert\File(mimeTypes={"image/png","image/jpeg","image/svg+xml"}, mimeTypesMessage="Only PNG's, JPG's and SVG's are allowed")
      * @Serializer\Exclude()
      */
-    private $logoFile;
+    private ?UploadedFile $logoFile = null;
 
     /**
-     * @var bool
      * @Serializer\Exclude()
      */
-    private $clearLogo = false;
+    private bool $clearLogo = false;
 
     /**
-     * @var string
-     * @ORM\Column(type="text", length=4294967295, name="comments",
-     *     options={"comment"="Comments"},
+     * @ORM\Column(type="text", length=4294967295, name="internalcomments",
+     *     options={"comment"="Internal comments (jury only)"},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    private $comments;
+    private ?string $internalComments;
 
     /**
      * @ORM\OneToMany(targetEntity="Team", mappedBy="affiliation")
      * @Serializer\Exclude()
      */
-    private $teams;
+    private Collection $teams;
 
     public function __construct()
     {
@@ -138,10 +134,21 @@ class TeamAffiliation extends BaseApiEntity implements AssetEntityInterface
         return $this->externalid;
     }
 
+    public function setIcpcid(?string $icpcid): TeamAffiliation
+    {
+        $this->icpcid = $icpcid;
+        return $this;
+    }
+
+    public function getIcpcid(): ?string
+    {
+        return $this->icpcid;
+    }
+
     public function setShortname(string $shortname): TeamAffiliation
     {
         // Truncate shortname here to make the import more robust. TODO: is this the right place/behavior?
-        $this->shortname = substr($shortname, 0, 32);
+        $this->shortname = mb_substr($shortname, 0, 32);
         return $this;
     }
 
@@ -177,15 +184,15 @@ class TeamAffiliation extends BaseApiEntity implements AssetEntityInterface
         return $this->country;
     }
 
-    public function setComments(string $comments): TeamAffiliation
+    public function setInternalComments(?string $comments): TeamAffiliation
     {
-        $this->comments = $comments;
+        $this->internalComments = $comments;
         return $this;
     }
 
-    public function getComments(): ?string
+    public function getInternalComments(): ?string
     {
-        return $this->comments;
+        return $this->internalComments;
     }
 
     public function getLogoFile(): ?UploadedFile
@@ -216,7 +223,7 @@ class TeamAffiliation extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeTeam(Team $team)
+    public function removeTeam(Team $team): void
     {
         $this->teams->removeElement($team);
     }

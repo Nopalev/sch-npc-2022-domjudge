@@ -14,27 +14,10 @@ use Symfony\Component\HttpKernel\Profiler\Profiler;
  */
 class ProfilerDisableListener implements EventSubscriberInterface
 {
-    /**
-     * @var KernelInterface
-     */
-    protected $kernel;
+    protected KernelInterface $kernel;
+    protected DOMJudgeService $dj;
+    protected ?Profiler $profiler;
 
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var Profiler|null
-     */
-    protected $profiler;
-
-    /**
-     * ProfilerDisableListener constructor.
-     * @param KernelInterface $kernel
-     * @param DOMJudgeService $dj
-     * @param Profiler|null        $profiler
-     */
     public function __construct(KernelInterface $kernel, DOMJudgeService $dj, ?Profiler $profiler)
     {
         $this->dj       = $dj;
@@ -47,12 +30,12 @@ class ProfilerDisableListener implements EventSubscriberInterface
      */
     public static function getSubscribedEvents(): array
     {
-        return [RequestEvent::class => 'onKernelRequest',];
+        return [RequestEvent::class => 'onKernelRequest'];
     }
 
     public function onKernelRequest(): void
     {
-        // Disable the profiler for users with the judgehost permission but not the admin one
+        // Disable the profiler for users with the judgehost permission but not the admin one.
         if ($this->profiler && $this->dj->checkrole('judgehost') && !$this->dj->checkrole('admin')) {
             $this->profiler->disable();
         }

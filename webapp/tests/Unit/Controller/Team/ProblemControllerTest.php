@@ -10,14 +10,14 @@ use Generator;
 
 class ProblemControllerTest extends BaseTest
 {
-    protected $roles = ['team'];
+    protected array $roles = ['team'];
 
     /**
      * Test that the problem index page shows the correct information.
      *
      * @dataProvider withLimitsProvider
      */
-    public function testIndex(bool $withLimits) : void
+    public function testIndex(bool $withLimits): void
     {
         $problems     = [
             'boolfind',
@@ -30,7 +30,7 @@ class ProblemControllerTest extends BaseTest
             'Hello World',
         ];
         /** @var EntityManagerInterface $em */
-        $em               = self::$container->get(EntityManagerInterface::class);
+        $em               = self::getContainer()->get(EntityManagerInterface::class);
         $problemTextsData = $em->createQueryBuilder()
             ->from('App:Problem', 'p')
             ->select('p.externalid, p.problemtext')
@@ -87,7 +87,7 @@ class ProblemControllerTest extends BaseTest
             });
     }
 
-    public function withLimitsProvider() : Generator
+    public function withLimitsProvider(): Generator
     {
         yield [false];
         yield [true];
@@ -96,10 +96,10 @@ class ProblemControllerTest extends BaseTest
     /**
      * Test that the problems page shows only sample data.
      */
-    public function testSamples() : void
+    public function testSamples(): void
     {
         // First, enable two samples for the fltcmp problem.
-        $em = self::$container->get(EntityManagerInterface::class);
+        $em = self::getContainer()->get(EntityManagerInterface::class);
         /** @var Problem $problem */
         $problem = $em->getRepository(Problem::class)->findOneBy(['externalid' => 'fltcmp']);
 
@@ -141,7 +141,7 @@ class ProblemControllerTest extends BaseTest
 
         for ($i = 1; $i <= 2; $i++) {
             self::assertSame($samples[$i]->getContent()->getInput(), $content["$i.in"]);
-            self::assertSame($samples[$i]->getContent()->getOutput(), $content["$i.out"]);
+            self::assertSame($samples[$i]->getContent()->getOutput(), $content["$i.ans"]);
         }
         // Does not contain more than these 4 files.
         self::assertCount(4, $content);

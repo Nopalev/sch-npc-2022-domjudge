@@ -45,7 +45,7 @@ chapters for detailed software requirements.
 
 * At least one machine to act as the *DOMjudge server* (or *domserver* for
   brevity). The machine needs to be running Linux (or possibly a Unix
-  variant) and a webserver with PHP 7.2.5 or newer. A MySQL or MariaDB
+  variant) and a webserver with PHP 7.4.0 or newer. A MySQL or MariaDB
   database is also needed.
 
 * A number of machines to act as *judgehosts* (at least one). They need to run
@@ -103,6 +103,7 @@ Many other people have contributed:
 Michael Baer,
 Jelle Besseling,
 Jeroen Bransen,
+Mohammad Amin Chitgarha,
 Matt Claycomb,
 Stijn van Drongelen,
 Rob Franken,
@@ -123,7 +124,10 @@ Robin Lee,
 Tom Levy,
 Richard Lobb,
 Shuibin Long,
+Jeremy London,
+Edoardo Morassutto,
 Alex Muntada,
+Lyuzhi Pan,
 Dominik Paulus,
 Bert Peters,
 Ludo Pulles,

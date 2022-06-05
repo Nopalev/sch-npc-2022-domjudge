@@ -7,12 +7,12 @@ use Generator;
 
 class ImportExportControllerTest extends BaseTest
 {
-    protected $roles = ['admin'];
+    protected array $roles = ['admin'];
 
     /**
      * Test that the basic building blocks of the index page are there.
      */
-    public function testIndexBasic() : void
+    public function testIndexBasic(): void
     {
         $this->verifyPageResponse('GET', '/jury/import-export', 200);
 
@@ -31,7 +31,7 @@ class ImportExportControllerTest extends BaseTest
      *
      * @dataProvider provideContests
      */
-    public function testIndexContestDropdowns(string $contest) : void
+    public function testIndexContestDropdowns(string $contest): void
     {
         $this->verifyPageResponse('GET', '/jury/import-export', 200);
 
@@ -44,7 +44,7 @@ class ImportExportControllerTest extends BaseTest
      *
      * @dataProvider provideSortOrders
      */
-    public function testIndexGeneratedItems(string $sortOrder) : void
+    public function testIndexGeneratedItems(string $sortOrder): void
     {
         $this->verifyPageResponse('GET', '/jury/import-export', 200);
 
@@ -66,7 +66,7 @@ class ImportExportControllerTest extends BaseTest
     /**
      * Test that submit buttons show an icon.
      */
-    public function testIndexButtonsHaveIcons() : void
+    public function testIndexButtonsHaveIcons(): void
     {
         $this->verifyPageResponse('GET', '/jury/import-export', 200);
 
@@ -236,18 +236,5 @@ HEREDOC;
         self::assertSelectorExists('h1:contains("Results for Demo contest")');
         self::assertSelectorExists('th:contains("Example teamname")');
         self::assertSelectorExists('th:contains("hello: Hello World")');
-    }
-
-    /**
-     * Test export of ICPC results.html.
-     */
-    public function testICPCResultsHtmlExport(): void
-    {
-        $this->verifyPageResponse('GET', '/jury/import-export', 200);
-        $link = $this->getCurrentCrawler()->filter('li:contains("ICPC site results.html") a:contains("for sort order 0")')->link();
-        $this->client->click($link);
-        self::assertSelectorExists('table#medalTable .row1.gold td[class="name"]:contains("Example teamname")');
-        self::assertSelectorExists('table#uniTable th:contains("Honorable mention")');
-        self::assertSelectorExists('table#firstTable td[class="name"]:contains("Hello World")');
     }
 }

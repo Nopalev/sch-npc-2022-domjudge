@@ -6,10 +6,10 @@ use DateTime;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use Exception;
 use JMS\Serializer\Annotation as Serializer;
 use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Security\Core\User\EquatableInterface;
+use Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -19,16 +19,17 @@ use Symfony\Component\Validator\Constraints as Assert;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="user",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Users that have access to DOMjudge"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Users that have access to DOMjudge"},
  *     indexes={@ORM\Index(name="teamid", columns={"teamid"})},
- *     uniqueConstraints={@ORM\UniqueConstraint(name="username", columns={"username"}, options={"lengths":{190}})})
+ *     uniqueConstraints={
+ *         @ORM\UniqueConstraint(name="username", columns={"username"}, options={"lengths":{190}}),
+ *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths":{190}}),
+ *     })
  * @UniqueEntity("username", message="The username '{{ value }}' is already in use.")
  */
-class User implements UserInterface, EquatableInterface, \Serializable
+class User extends BaseApiEntity implements UserInterface, PasswordAuthenticatedUserInterface, EquatableInterface, ExternalRelationshipEntityInterface
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="userid", length=4,
@@ -36,33 +37,41 @@ class User implements UserInterface, EquatableInterface, \Serializable
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
-    private $userid;
+    private ?int $userid = null;
 
     /**
-     * @var string
+     * @ORM\Column(type="string", name="externalid", length=255,
+     *     options={"comment"="User ID in an external system",
+     *              "collation"="utf8mb4_bin"},
+     *     nullable=true)
+     * @Serializer\Exclude()
+     */
+    protected ?string $externalid = null;
+
+    /**
      * @ORM\Column(type="string", name="username", length=255,
      *     options={"comment"="User login name"}, nullable=false)
      * @Assert\Regex("/^[a-z0-9@._-]+$/i", message="Only alphanumeric characters and _-@. are allowed")
      */
-    private $username = '';
+    private string $username = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="name", length=255,
      *     options={"comment"="Name"}, nullable=false)
+     * @Serializer\Groups({"Nonstrict"})
      */
-    private $name = '';
+    private string $name = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="email", length=255,
      *     options={"comment"="Email address"}, nullable=true)
      * @Assert\Email()
+     * @Serializer\Groups({"Nonstrict"})
      */
-    private $email = null;
+    private ?string $email = null;
 
     /**
-     * @var double
+     * @var double|string|null
      * @ORM\Column(type="decimal", precision=32, scale=9, name="last_login",
      *     options={"comment"="Time of last successful login", "unsigned"=true},
      *     nullable=true)
@@ -71,7 +80,7 @@ class User implements UserInterface, EquatableInterface, \Serializable
     private $last_login;
 
     /**
-     * @var double
+     * @var double|string|null
      * @ORM\Column(type="decimal", precision=32, scale=9, name="first_login",
      *     options={"comment"="Time of first login", "unsigned"=true},
      *     nullable=true)
@@ -80,53 +89,50 @@ class User implements UserInterface, EquatableInterface, \Serializable
     private $first_login;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="last_ip_address", length=255,
      *     options={"comment"="Last IP address of successful login"},
      *     nullable=true)
      * @Serializer\SerializedName("last_ip")
+     * @Serializer\Groups({"Nonstrict"})
      */
-    private $last_ip_address;
+    private ?string $last_ip_address;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="password", length=255,
      *     options={"comment"="Password hash"}, nullable=true)
      * @Serializer\Exclude()
      */
-    private $password;
+    private ?string $password = null;
 
     /**
-     * @var string|null
      * @Serializer\Exclude()
      */
-    private $plainPassword;
+    private ?string $plainPassword = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="ip_address", length=255,
      *     options={"comment"="IP Address used to autologin"},
      *     nullable=true)
      * @Serializer\SerializedName("ip")
      * @Assert\Ip(version="all")
      */
-    private $ipAddress;
+    private ?string $ipAddress;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="enabled",
      *     options={"comment"="Whether the user is able to log in",
      *              "default"="1"},
      *     nullable=false)
+     * @Serializer\Groups({"Nonstrict"})
      */
-    private $enabled = true;
+    private bool $enabled = true;
 
     /**
      * @ORM\ManyToOne(targetEntity="Team", inversedBy="users")
      * @ORM\JoinColumn(name="teamid", referencedColumnName="teamid", onDelete="SET NULL")
      * @Serializer\Exclude()
      */
-    private $team;
+    private ?Team $team;
 
     /**
      * @ORM\ManyToMany(targetEntity="Role", inversedBy="users")
@@ -140,13 +146,13 @@ class User implements UserInterface, EquatableInterface, \Serializable
      * Note that this property is called `user_roles` and not `roles` because the
      * UserInterface expects roles/getRoles to return a string list of roles, not objects.
      */
-    private $user_roles;
+    private Collection $user_roles;
 
     /**
      * @ORM\OneToMany(targetEntity="Submission", mappedBy="user")
      * @Serializer\Exclude()
      */
-    private $submissions;
+    private Collection $submissions;
 
     public function getSalt(): ?string
     {
@@ -158,22 +164,22 @@ class User implements UserInterface, EquatableInterface, \Serializable
         $this->plainPassword = null;
     }
 
-    public function serialize()
+    public function __serialize(): array
     {
-        return serialize(array(
+        return [
             $this->userid,
             $this->username,
             $this->password,
-        ));
+        ];
     }
 
-    public function unserialize($serialized)
+    public function __unserialize(array $data): void
     {
-        list(
+        [
             $this->userid,
             $this->username,
-            $this->password
-        ) = unserialize($serialized);
+            $this->password,
+        ] = $data;
     }
 
     public function getUserid(): ?int
@@ -181,9 +187,20 @@ class User implements UserInterface, EquatableInterface, \Serializable
         return $this->userid;
     }
 
+    public function setExternalid(?string $externalid): User
+    {
+        $this->externalid = $externalid;
+        return $this;
+    }
+
+    public function getExternalid(): ?string
+    {
+        return $this->externalid;
+    }
+
     public function setUsername(?string $username): User
     {
-        $this->username = $username;
+        $this->username = (string)$username;
         return $this;
     }
 
@@ -194,7 +211,7 @@ class User implements UserInterface, EquatableInterface, \Serializable
 
     public function setName(?string $name): User
     {
-        $this->name = $name;
+        $this->name = (string)$name;
         return $this;
     }
 
@@ -235,8 +252,8 @@ class User implements UserInterface, EquatableInterface, \Serializable
     /**
      * @Serializer\VirtualProperty()
      * @Serializer\SerializedName("last_login_time")
+     * @Serializer\Groups({"Nonstrict"})
      * @Serializer\Type("DateTime")
-     * @throws Exception
      */
     public function getLastLoginAsDateTime(): ?DateTime
     {
@@ -259,8 +276,8 @@ class User implements UserInterface, EquatableInterface, \Serializable
     /**
      * @Serializer\VirtualProperty()
      * @Serializer\SerializedName("first_login_time")
+     * @Serializer\Groups({"Nonstrict"})
      * @Serializer\Type("DateTime")
-     * @throws Exception
      */
     public function getFirstLoginAsDateTime(): ?DateTime
     {
@@ -346,6 +363,16 @@ class User implements UserInterface, EquatableInterface, \Serializable
         return $this->getTeam() ? $this->getTeam()->getEffectiveName() : null;
     }
 
+    /**
+     * @Serializer\VirtualProperty()
+     * @Serializer\SerializedName("team_id")
+     * @Serializer\Type("string")
+     */
+    public function getTeamId(): ?int
+    {
+        return $this->getTeam() ? $this->getTeam()->getTeamid() : null;
+    }
+
     public function __construct()
     {
         $this->user_roles = new ArrayCollection();
@@ -358,7 +385,7 @@ class User implements UserInterface, EquatableInterface, \Serializable
         return $this;
     }
 
-    public function removeUserRole(Role $role)
+    public function removeUserRole(Role $role): void
     {
         $this->user_roles->removeElement($role);
     }
@@ -372,6 +399,7 @@ class User implements UserInterface, EquatableInterface, \Serializable
      * Get the roles of this user as an array of strings
      * @Serializer\VirtualProperty()
      * @Serializer\SerializedName("roles")
+     * @Serializer\Groups({"Nonstrict"})
      * @Serializer\Type("array<string>")
      */
     public function getRoleList(): array
@@ -382,6 +410,30 @@ class User implements UserInterface, EquatableInterface, \Serializable
         }
 
         return $result;
+    }
+
+    /**
+     * Get the type of this user for the CCS Specs Contest API
+     * @Serializer\VirtualProperty()
+     * @Serializer\SerializedName("type")
+     * @Serializer\Type("string")
+     */
+    public function getType(): ?string
+    {
+        // Types allowed by the CCS Specs Contest API in order of most permissions to least
+        // Either key=>value where key is the DOMjudge role and value is the API type or
+        // only value, where both the DOMjudge role and API type are the same
+        $allowedTypes = ['admin', 'jury' => 'judge', 'api_reader' => 'admin', 'team'];
+        foreach ($allowedTypes as $role => $allowedType) {
+            if (is_numeric($role)) {
+                $role = $allowedType;
+            }
+            if (in_array($role, $this->getRoleList())) {
+                return $allowedType;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -403,7 +455,7 @@ class User implements UserInterface, EquatableInterface, \Serializable
         return $this;
     }
 
-    public function removeSubmission(Submission $submission)
+    public function removeSubmission(Submission $submission): void
     {
         $this->submissions->removeElement($submission);
     }
@@ -435,5 +487,17 @@ class User implements UserInterface, EquatableInterface, \Serializable
         }
 
         return true;
+    }
+
+    public function getUserIdentifier(): string
+    {
+        return $this->getUsername();
+    }
+
+    public function getExternalRelationships(): array
+    {
+        return [
+            'team_id' => $this->getTeam(),
+        ];
     }
 }

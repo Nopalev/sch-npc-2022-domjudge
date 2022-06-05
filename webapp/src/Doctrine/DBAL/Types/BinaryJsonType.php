@@ -7,24 +7,18 @@ use Doctrine\DBAL\Platforms\AbstractPlatform;
 /**
  * Class BinaryJsonType
  *
- * This is a version of the JsonType that stores its data as a LONGBLOB
+ * This is a version of the JsonType that stores its data as a LONGBLOB.
  *
  * @package App\Doctrine\DBAL\Types
  */
 class BinaryJsonType extends JsonType
 {
-    /**
-     * @inheritDoc
-     */
-    public function getSQLDeclaration(array $fieldDeclaration, AbstractPlatform $platform)
+    public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
     {
         return 'LONGBLOB';
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getName()
+    public function getName(): string
     {
         return 'binaryjson';
     }

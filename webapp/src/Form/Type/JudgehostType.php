@@ -3,7 +3,6 @@
 namespace App\Form\Type;
 
 use App\Entity\Judgehost;
-use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
@@ -12,12 +11,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class JudgehostType extends AbstractType
 {
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('hostname', TextType::class, [
             'attr' => ['readonly' => true],
         ]);
-        $builder->add('active', ChoiceType::class, [
+        $builder->add('enabled', ChoiceType::class, [
             'choices' => [
                 'yes' => true,
                 'no' => false,
@@ -31,7 +30,7 @@ class JudgehostType extends AbstractType
         ]);
     }
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => Judgehost::class]);
     }

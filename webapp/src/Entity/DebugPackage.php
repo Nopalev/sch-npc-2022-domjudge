@@ -12,7 +12,7 @@ use Doctrine\ORM\Mapping as ORM;
  *     indexes={
  *         @ORM\Index(name="judgingid", columns={"judgingid"}),
  *     },
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Debug packages."}
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Debug packages."}
  *     )
  */
 class DebugPackage
@@ -26,13 +26,13 @@ class DebugPackage
      *     options={"comment"="Debug Package ID","unsigned"=true},
      *     nullable=false)
      */
-    private $debug_package_id;
+    private int $debug_package_id;
 
     /**
      * @ORM\ManyToOne(targetEntity="Judging", inversedBy="debug_packages")
      * @ORM\JoinColumn(name="judgingid", referencedColumnName="judgingid", onDelete="CASCADE")
      */
-    private $judging;
+    private Judging $judging;
 
     /**
      * @var string
@@ -40,13 +40,13 @@ class DebugPackage
      *     options={"comment"="Name of the file where we stored the debug package."},
      *     nullable=false)
      */
-    private $filename;
+    private string $filename;
 
     /**
      * @ORM\ManyToOne(targetEntity="Judgehost")
      * @ORM\JoinColumn(name="judgehostid", referencedColumnName="judgehostid")
      */
-    private $judgehost;
+    private Judgehost $judgehost;
 
     public function getDebugPackageId(): int
     {

@@ -2,23 +2,22 @@
 
 namespace App\Helpers;
 
+use Traversable;
+
 /**
  * Class OrdinalArray
  *
- * This class is used to output an ordinal list
+ * This class is used to output an ordinal list.
  *
  * @package App\Serializer
  */
 class OrdinalArray
 {
-    /**
-     * @var OrdinalItem[]
-     */
-    protected $items;
+    /** @var OrdinalItem[] */
+    protected array $items;
 
     /**
-     * OrdinalArray constructor.
-     * @param array|\Traversable $items
+     * @param array|Traversable $items
      */
     public function __construct($items)
     {

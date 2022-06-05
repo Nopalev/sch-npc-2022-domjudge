@@ -13,7 +13,7 @@ use Symfony\Component\Validator\Constraints as Assert;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="judgehost",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Hostnames of the autojudgers"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Hostnames of the autojudgers"},
  *     uniqueConstraints={
  *         @ORM\UniqueConstraint(name="hostname", columns={"hostname"})
  *     })
@@ -22,8 +22,6 @@ use Symfony\Component\Validator\Constraints as Assert;
 class Judgehost
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="judgehostid", length=4,
@@ -32,26 +30,24 @@ class Judgehost
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
-    private $judgehostid;
+    private int $judgehostid;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="hostname", length=64, options={"comment"="Resolvable hostname of judgehost"}, nullable=false)
      * @Assert\Regex("/^[A-Za-z0-9_\-.]*$/", message="Invalid hostname. Only characters in [A-Za-z0-9_\-.] are allowed.")
      */
-    private $hostname;
+    private string $hostname;
 
     /**
-     * @var boolean
-     * @ORM\Column(type="boolean", name="active",
+     * @ORM\Column(type="boolean", name="enabled",
      *     options={"comment"="Should this host take on judgings?",
      *              "default"="1"},
      *     nullable=false)
      */
-    private $active = true;
+    private bool $enabled = true;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="polltime",
      *     options={"comment"="Time of last poll by autojudger",
      *              "unsigned"=true},
@@ -63,16 +59,15 @@ class Judgehost
      * @ORM\OneToMany(targetEntity="JudgeTask", mappedBy="judgehost")
      * @Serializer\Exclude()
      */
-    private $judgetasks;
+    private Collection $judgetasks;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="hidden",
      *     options={"comment"="Should this host be hidden in the overview?",
      *              "default"="0"},
      *     nullable=false)
      */
-    private $hidden = false;
+    private bool $hidden = false;
 
     public function __construct()
     {
@@ -100,15 +95,15 @@ class Judgehost
         return $this->getHostname();
     }
 
-    public function setActive(bool $active): Judgehost
+    public function setEnabled(bool $enabled): Judgehost
     {
-        $this->active = $active;
+        $this->enabled = $enabled;
         return $this;
     }
 
-    public function getActive(): bool
+    public function getEnabled(): bool
     {
-        return $this->active;
+        return $this->enabled;
     }
 
     /** @param string|float $polltime */
@@ -130,7 +125,7 @@ class Judgehost
         return $this;
     }
 
-    public function removeJudgeTask(JudgeTask $judgeTask)
+    public function removeJudgeTask(JudgeTask $judgeTask): void
     {
         $this->judgetasks->removeElement($judgeTask);
     }

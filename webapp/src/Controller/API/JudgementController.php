@@ -10,12 +10,10 @@ use App\Service\EventLogService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use OpenApi\Annotations as OA;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -32,7 +30,7 @@ class JudgementController extends AbstractRestController implements QueryObjectT
     /**
      * @var string[]
      */
-    protected $verdicts;
+    protected array $verdicts;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -47,7 +45,7 @@ class JudgementController extends AbstractRestController implements QueryObjectT
     }
 
     /**
-     * Get all the judgements for this contest
+     * Get all the judgements for this contest.
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_TEAM') or is_granted('ROLE_JUDGEHOST') or is_granted('ROLE_API_READER')")
      * @Rest\Get("")
      * @OA\Response(
@@ -79,13 +77,13 @@ class JudgementController extends AbstractRestController implements QueryObjectT
      * )
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : Response
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given judgement for this contest
+     * Get the given judgement for this contest.
      * @throws NonUniqueResultException
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_TEAM') or is_granted('ROLE_JUDGEHOST') or is_granted('ROLE_API_READER')")
      * @Rest\Get("/{id}")
@@ -102,14 +100,11 @@ class JudgementController extends AbstractRestController implements QueryObjectT
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
         $queryBuilder = $this->em->createQueryBuilder()
@@ -120,7 +115,7 @@ class JudgementController extends AbstractRestController implements QueryObjectT
             ->leftJoin('j.rejudging', 'r')
             ->leftJoin('j.runs', 'jr')
             ->andWhere('j.contest = :cid')
-            ->setParameter(':cid', $this->getContestId($request))
+            ->setParameter('cid', $this->getContestId($request))
             ->groupBy('j.judgingid')
             ->orderBy('j.judgingid');
 
@@ -129,7 +124,7 @@ class JudgementController extends AbstractRestController implements QueryObjectT
         if ($request->query->has('result')) {
             $queryBuilder
                 ->andWhere('j.result = :result')
-                ->setParameter(':result', $request->query->get('result'));
+                ->setParameter('result', $request->query->get('result'));
         } elseif (!$roleAllowsVisibility) {
             $queryBuilder->andWhere('j.result IS NOT NULL');
         }
@@ -137,13 +132,13 @@ class JudgementController extends AbstractRestController implements QueryObjectT
         if (!$roleAllowsVisibility) {
             $queryBuilder
                 ->andWhere('s.team = :team')
-                ->setParameter(':team', $this->dj->getUser()->getTeam());
+                ->setParameter('team', $this->dj->getUser()->getTeam());
         }
 
         if ($request->query->has('submission_id')) {
             $queryBuilder
                 ->andWhere('j.submission = :submission')
-                ->setParameter(':submission', $request->query->get('submission_id'));
+                ->setParameter('submission', $request->query->get('submission_id'));
         }
 
         $specificJudgingRequested = $request->attributes->has('id')
@@ -167,7 +162,7 @@ class JudgementController extends AbstractRestController implements QueryObjectT
         return 'j.judgingid';
     }
 
-    public function transformObject($object) : JudgingWrapper
+    public function transformObject($object): JudgingWrapper
     {
         /** @var Judging $judging */
         $judging         = $object[0];

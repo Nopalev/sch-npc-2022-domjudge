@@ -3,6 +3,7 @@
 namespace App\Controller\Jury;
 
 use App\Controller\BaseController;
+use App\Entity\Judging;
 use App\Entity\Submission;
 use App\Entity\TeamCategory;
 use App\Form\Type\TeamCategoryType;
@@ -13,11 +14,9 @@ use App\Service\SubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Symfony\Component\Asset\Packages;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\KernelInterface;
@@ -30,30 +29,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class TeamCategoryController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var KernelInterface
-     */
-    protected $kernel;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected KernelInterface $kernel;
+    protected EventLogService $eventLogService;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -72,7 +52,7 @@ class TeamCategoryController extends BaseController
     /**
      * @Route("", name="jury_team_categories")
      */
-    public function indexAction(Request $request, Packages $assetPackage): Response
+    public function indexAction(): Response
     {
         $em             = $this->em;
         $teamCategories = $em->createQueryBuilder()
@@ -85,6 +65,7 @@ class TeamCategoryController extends BaseController
             ->getQuery()->getResult();
         $table_fields   = [
             'categoryid' => ['title' => 'ID', 'sort' => true],
+            'icpcid' => ['title' => 'ICPC ID', 'sort' => true],
             'sortorder' => ['title' => 'sort', 'sort' => true, 'default_sort' => true],
             'name' => ['title' => 'name', 'sort' => true],
             'num_teams' => ['title' => '# teams', 'sort' => true],
@@ -92,7 +73,7 @@ class TeamCategoryController extends BaseController
             'allow_self_registration' => ['title' => 'self-registration', 'sort' => true],
         ];
 
-        // Insert external ID field when configured to use it
+        // Insert external ID field when configured to use it.
         if ($externalIdField = $this->eventLogService->externalIdFieldForEntity(TeamCategory::class)) {
             $table_fields = array_slice($table_fields, 0, 1, true) +
                 [$externalIdField => ['title' => 'external ID', 'sort' => true]] +
@@ -106,7 +87,7 @@ class TeamCategoryController extends BaseController
             $teamCategory    = $teamCategoryData[0];
             $categorydata    = [];
             $categoryactions = [];
-            // Get whatever fields we can from the category object itself
+            // Get whatever fields we can from the category object itself.
             foreach ($table_fields as $k => $v) {
                 if ($propertyAccessor->isReadable($teamCategory, $k)) {
                     $categorydata[$k] = ['value' => $propertyAccessor->getValue($teamCategory, $k)];
@@ -154,7 +135,7 @@ class TeamCategoryController extends BaseController
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function viewAction(Request $request, SubmissionService $submissionService, int $categoryId) : Response
+    public function viewAction(Request $request, SubmissionService $submissionService, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
         $teamCategory = $this->em->getRepository(TeamCategory::class)->find($categoryId);
@@ -183,7 +164,7 @@ class TeamCategoryController extends BaseController
             ],
         ];
 
-        // For ajax requests, only return the submission list partial
+        // For ajax requests, only return the submission list partial.
         if ($request->isXmlHttpRequest()) {
             $data['showTestcases'] = false;
             return $this->render('jury/partials/submission_list.html.twig', $data);
@@ -195,10 +176,8 @@ class TeamCategoryController extends BaseController
     /**
      * @Route("/{categoryId<\d+>}/edit", name="jury_team_category_edit")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function editAction(Request $request, int $categoryId)
+    public function editAction(Request $request, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
         $teamCategory = $this->em->getRepository(TeamCategory::class)->find($categoryId);
@@ -226,10 +205,8 @@ class TeamCategoryController extends BaseController
     /**
      * @Route("/{categoryId<\d+>}/delete", name="jury_team_category_delete")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function deleteAction(Request $request, int $categoryId)
+    public function deleteAction(Request $request, int $categoryId): Response
     {
         /** @var TeamCategory $teamCategory */
         $teamCategory = $this->em->getRepository(TeamCategory::class)->find($categoryId);
@@ -244,9 +221,8 @@ class TeamCategoryController extends BaseController
     /**
      * @Route("/add", name="jury_team_category_add")
      * @IsGranted("ROLE_ADMIN")
-     * @throws Exception
      */
-    public function addAction(Request $request) : Response
+    public function addAction(Request $request): Response
     {
         $teamCategory = new TeamCategory();
 
@@ -263,5 +239,35 @@ class TeamCategoryController extends BaseController
         return $this->render('jury/team_category_add.html.twig', [
             'form' => $form->createView(),
         ]);
+    }
+
+    /**
+     * @Route("/{categoryId<\d+>}/request-remaining", name="jury_team_category_request_remaining")
+     */
+    public function requestRemainingRunsWholeTeamCategoryAction(string $categoryId): RedirectResponse
+    {
+        /** @var TeamCategory $category */
+        $category = $this->em->getRepository(TeamCategory::class)->find($categoryId);
+        if (!$category) {
+            throw new NotFoundHttpException(sprintf('Team category with ID %s not found', $categoryId));
+        }
+        $contestId = $this->dj->getCurrentContest()->getCid();
+        $query = $this->em->createQueryBuilder()
+                          ->from(Judging::class, 'j')
+                          ->select('j')
+                          ->join('j.submission', 's')
+                          ->join('s.team', 't')
+                          ->join('t.category', 'tc')
+                          ->andWhere('j.valid = true')
+                          ->andWhere('tc.category = :categoryId')
+                          ->setParameter('categoryId', $categoryId);
+        if ($contestId > -1) {
+            $query->andWhere('s.contest = :contestId')
+                  ->setParameter('contestId', $contestId);
+        }
+        $judgings = $query->getQuery()
+                          ->getResult();
+        $this->judgeRemaining($judgings);
+        return $this->redirect($this->generateUrl('jury_team_category', ['categoryId' => $categoryId]));
     }
 }

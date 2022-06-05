@@ -19,20 +19,11 @@ class FreezeData
     const KEY_RUNNING = 'running';
     const KEY_FINALIZED = 'finalized';
 
-    /**
-     * @var Contest|null
-     */
-    protected $contest;
+    protected ?Contest $contest;
 
-    /**
-     * @var bool[]
-     */
-    protected $cache = [];
+    /** @var bool[] */
+    protected array $cache = [];
 
-    /**
-     * FreezeData constructor.
-     * @param Contest|null $contest
-     */
     public function __construct(Contest $contest = null)
     {
         $this->contest = $contest;
@@ -40,10 +31,8 @@ class FreezeData
 
     /**
      * Whether to show final scores
-     * @param bool $jury
-     * @return bool
      */
-    public function showFinal(bool $jury = false)
+    public function showFinal(bool $jury = false): bool
     {
         if (!isset($this->cache[self::KEY_SHOW_FINAL]) ||
             !isset($this->cache[self::KEY_SHOW_FINAL_JURY])) {
@@ -69,20 +58,19 @@ class FreezeData
     }
 
     /**
-     * Whether to show the frozen scoreboard
-     * @return bool
+     * Whether to show the frozen scoreboard.
      */
-    public function showFrozen()
+    public function showFrozen(): bool
     {
         if (!isset($this->cache[self::KEY_SHOW_FROZEN])) {
             if (!$this->contest || !$this->contest->getStarttimeEnabled()) {
                 $this->cache[self::KEY_SHOW_FROZEN] = false;
             } else {
-                // Freeze scoreboard if freeze time has been reached and we're not showing the final score yet
+                // Freeze scoreboard if freeze time has been reached and we're not showing the final score yet.
                 $now             = Utils::now();
                 $hasFreezeTime   = $this->contest->getFreezetime() !== null;
                 $hasUnfreezeTime = $this->contest->getUnfreezetime() !== null;
-                // Show frozen scoreboard when we are between freezetime and unfreezetime
+                // Show frozen scoreboard when we are between freezetime and unfreezetime.
                 $this->cache[self::KEY_SHOW_FROZEN] =
                     ($hasFreezeTime && Utils::difftime((float)$this->contest->getFreezetime(), $now) <= 0) &&
                     (!$hasUnfreezeTime || Utils::difftime($now, (float)$this->contest->getUnfreezetime()) <= 0);
@@ -93,10 +81,9 @@ class FreezeData
     }
 
     /**
-     * Whether the contest has started
-     * @return bool
+     * Whether the contest has started.
      */
-    public function started()
+    public function started(): bool
     {
         if (!isset($this->cache[self::KEY_STARTED])) {
             if (!$this->contest || !$this->contest->getStarttimeEnabled()) {
@@ -111,10 +98,9 @@ class FreezeData
     }
 
     /**
-     * Whether the contest has stopped
-     * @return bool
+     * Whether the contest has stopped.
      */
-    public function stopped()
+    public function stopped(): bool
     {
         if (!isset($this->cache[self::KEY_STOPPED])) {
             if (!$this->contest || !$this->contest->getStarttimeEnabled()) {
@@ -129,10 +115,9 @@ class FreezeData
     }
 
     /**
-     * Whether the contest is running
-     * @return bool
+     * Whether the contest is running.
      */
-    public function running()
+    public function running(): bool
     {
         if (!isset($this->cache[self::KEY_RUNNING])) {
             $this->cache[self::KEY_RUNNING] = $this->started() && !$this->stopped();
@@ -142,11 +127,10 @@ class FreezeData
     }
 
     /**
-     * Whether the contest is finalized
-     * This is normally only used when we have a downstream CDS
-     * @return bool
+     * Whether the contest is finalized.
+     * This is normally only used when we have a downstream CDS.
      */
-    public function finalized()
+    public function finalized(): bool
     {
         if (!isset($this->cache[self::KEY_FINALIZED])) {
             if (!$this->contest || !$this->contest->getStarttimeEnabled()) {
@@ -162,10 +146,9 @@ class FreezeData
     }
 
     /**
-     * Get the progress of this freezedata
-     * @return int
+     * Get the progress of this freezedata.
      */
-    public function getProgress()
+    public function getProgress(): int
     {
         $now = Utils::now();
         if (!$this->started()) {

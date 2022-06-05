@@ -4,33 +4,18 @@ namespace App\Utils\Scoreboard;
 
 class Filter
 {
-    /**
-     * @var int[]
-     */
-    public $affiliations = [];
+    /** int[] */
+    public array $affiliations = [];
 
-    /**
-     * @var string[]
-     */
-    public $countries = [];
+    /** @var string[] */
+    public array $countries = [];
 
-    /**
-     * @var int[]
-     */
-    public $categories = [];
+    /** @var int[] */
+    public array $categories = [];
 
-    /**
-     * @var int[]
-     */
-    public $teams = [];
+    /** @var int[] */
+    public array $teams = [];
 
-    /**
-     * Filter constructor.
-     * @param int[] $affiliations
-     * @param string[] $countries
-     * @param int[] $categories
-     * @param int[] $teams
-     */
     public function __construct(
         array $affiliations = [],
         array $countries = [],
@@ -44,8 +29,7 @@ class Filter
     }
 
     /**
-     * Get a string to display on what has been filtered
-     * @return string
+     * Get a string to display on what has been filtered.
      */
     public function getFilteredOn(): string
     {

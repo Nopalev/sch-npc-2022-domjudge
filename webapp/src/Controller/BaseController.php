@@ -4,21 +4,23 @@ namespace App\Controller;
 
 use App\Entity\BaseApiEntity;
 use App\Entity\Contest;
+use App\Entity\JudgeTask;
+use App\Entity\ContestProblem;
 use App\Entity\Problem;
 use App\Entity\RankCache;
 use App\Entity\ScoreCache;
 use App\Entity\Team;
 use App\Entity\TeamCategory;
+use App\Entity\QueueTask;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Utils\Utils;
-use Doctrine\DBAL\DBALException;
+use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\Inflector\InflectorFactory;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\MappingException;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Exception;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -34,14 +36,14 @@ use Symfony\Component\Routing\RouterInterface;
 /**
  * Class BaseController
  *
- * Base controller other controllers can inherit from to get shared functionality
+ * Base controller other controllers can inherit from to get shared functionality.
  *
  * @package App\Controller
  */
 abstract class BaseController extends AbstractController
 {
     /**
-     * Check whether the referrer in the request is of the current application
+     * Check whether the referrer in the request is of the current application.
      */
     protected function isLocalReferer(RouterInterface $router, Request $request): bool
     {
@@ -54,12 +56,15 @@ abstract class BaseController extends AbstractController
     }
 
     /**
-     * Check whether the given referer is local
+     * Check whether the given referer is local.
      */
     protected function isLocalRefererUrl(RouterInterface $router, string $referer, string $prefix): bool
     {
         if (strpos($referer, $prefix) === 0) {
             $path = substr($referer, strlen($prefix));
+            if (($questionMark = strpos($path, '?')) !== false) {
+                $path = substr($path, 0, $questionMark);
+            }
             $context = $router->getContext();
             $method = $context->getMethod();
             $context->setMethod('GET');
@@ -77,7 +82,7 @@ abstract class BaseController extends AbstractController
     }
 
     /**
-     * Redirect to the referrer if it is a known (local) route, otherwise redirect to the given URL
+     * Redirect to the referrer if it is a known (local) route, otherwise redirect to the given URL.
      */
     protected function redirectToLocalReferrer(RouterInterface $router, Request $request, string $defaultUrl): RedirectResponse
     {
@@ -89,14 +94,7 @@ abstract class BaseController extends AbstractController
     }
 
     /**
-     * Save the given entity, adding an eventlog and auditlog entry
-     * @param EntityManagerInterface $entityManager
-     * @param EventLogService        $eventLogService
-     * @param DOMJudgeService        $DOMJudgeService
-     * @param object                 $entity
-     * @param mixed                  $id
-     * @param bool                   $isNewEntity
-     * @throws Exception
+     * Save the given entity, adding an eventlog and auditlog entry.
      */
     protected function saveEntity(
         EntityManagerInterface $entityManager,
@@ -112,7 +110,7 @@ abstract class BaseController extends AbstractController
         $entityManager->flush();
 
         // If we have no ID but we do have a Doctrine entity, automatically
-        // get the primary key if possible
+        // get the primary key if possible.
         if ($id === null) {
             try {
                 $metadata = $entityManager->getClassMetadata(get_class($entity));
@@ -122,7 +120,7 @@ abstract class BaseController extends AbstractController
                     $id         = $accessor->getValue($entity, $primaryKey);
                 }
             } catch (MappingException $e) {
-                // Entity is not actually a Doctrine entity, ignore
+                // Entity is not actually a Doctrine entity, ignore.
             }
         }
 
@@ -179,40 +177,40 @@ abstract class BaseController extends AbstractController
         DOMJudgeService $DOMJudgeService,
         EntityManagerInterface $entityManager,
         array $primaryKeyData,
-        $eventLogService
+        EventLogService $eventLogService
     ): void
     {
-        // Used to remove data from the rank and score caches
+        // Used to remove data from the rank and score caches.
         $teamId = null;
         if ($entity instanceof Team) {
             $teamId = $entity->getTeamid();
         }
 
         // Get the contests to trigger the event for. We do this before
-        // deleting the entity, since linked data might have vanished
+        // deleting the entity, since linked data might have vanished.
         $contestsForEntity = $this->contestsForEntity($entity, $DOMJudgeService);
 
         $cid = null;
-        // Remember the cid to use it in the EventLog later
+        // Remember the cid to use it in the EventLog later.
         if ($entity instanceof Contest) {
             $cid = $entity->getCid();
         }
-        $entityManager->transactional(function () use ($entityManager, $entity) {
+        $entityManager->wrapInTransaction(function () use ($entityManager, $entity) {
             if ($entity instanceof Problem) {
-                // Deleting problem is a special case: its dependent tables do not
-                // form a tree, and a delete to judging_run can only cascade from
+                // Deleting a problem is a special case: its dependent tables do not
+                // form a tree, and the deletion of judging_run can only cascade from
                 // judging, not from testcase. Since MySQL does not define the
                 // order of cascading deletes, we need to manually first cascade
                 // via submission -> judging -> judging_run.
                 $entityManager->getConnection()->executeQuery(
                     'DELETE FROM submission WHERE probid = :probid',
-                    [':probid' => $entity->getProbid()]
+                    ['probid' => $entity->getProbid()]
                 );
                 // Also delete internal errors that are "connected" to this problem.
                 $disabledJson = '{"kind":"problem","probid":' . $entity->getProbid() . '}';
                 $entityManager->getConnection()->executeQuery(
                     'DELETE FROM internal_error WHERE disabled = :disabled',
-                    [':disabled' => $disabledJson]
+                    ['disabled' => $disabledJson]
                 );
                 $entityManager->clear();
                 $entity = $entityManager->getRepository(Problem::class)->find($entity->getProbid());
@@ -220,20 +218,24 @@ abstract class BaseController extends AbstractController
             $entityManager->remove($entity);
         });
 
-        // Add an audit log entry
+        // Add an audit log entry.
         $auditLogType = Utils::tableForEntity($entity);
         $DOMJudgeService->auditlog($auditLogType, implode(', ', $primaryKeyData), 'deleted');
 
-        // Trigger the delete event
+        // Trigger the delete event.
         if ($endpoint = $eventLogService->endpointForEntity($entity)) {
             foreach ($contestsForEntity as $contest) {
                 // When the $entity is a contest it has no id anymore after the EntityManager->remove
-                // for this reason we either remember it or check all other contests and use their cid
+                // for this reason we either remember it or check all other contests and use their cid.
                 if (!$entity instanceof Contest) {
                     $cid = $contest->getCid();
                 }
+                $dataId = $primaryKeyData[0];
+                if ($entity instanceof ContestProblem) {
+                    $dataId = $entity->getProbid();
+                }
                 // TODO: cascade deletes. Maybe use getDependentEntities()?
-                $eventLogService->log($endpoint, $primaryKeyData[0],
+                $eventLogService->log($endpoint, $dataId,
                     EventLogService::ACTION_DELETE,
                     $cid, null, null, false);
             }
@@ -244,11 +246,11 @@ abstract class BaseController extends AbstractController
             // with same ID being created at the same time is negligible.
             $entityManager->getConnection()->executeQuery(
                 'DELETE FROM scorecache WHERE teamid = :teamid',
-                [':teamid' => $teamId]
+                ['teamid' => $teamId]
             );
             $entityManager->getConnection()->executeQuery(
                 'DELETE FROM rankcache WHERE teamid = :teamid',
-                [':teamid' => $teamId]
+                ['teamid' => $teamId]
             );
         }
     }
@@ -280,7 +282,7 @@ abstract class BaseController extends AbstractController
                                 ->from($table, 't')
                                 ->select(sprintf('COUNT(t.%s) AS cnt', $column))
                                 ->andWhere(sprintf('t.%s = :value', $column))
-                                ->setParameter(':value', $primaryKeyColumnValue)
+                                ->setParameter('value', $primaryKeyColumnValue)
                                 ->getQuery()
                                 ->getSingleScalarResult();
                             if ($count > 0) {
@@ -439,23 +441,22 @@ abstract class BaseController extends AbstractController
 
     /**
      * Get the contests that an event for the given entity should be triggered on
-     * @param                 $entity
-     * @param DOMJudgeService $dj
+     * @param mixed $entity
      *
      * @return Contest[]
      */
     protected function contestsForEntity($entity, DOMJudgeService $dj): array
     {
-        // Determine contests to emit an event for for the given entity:
+        // Determine contests to emit an event for the given entity:
         // * If the entity is a Problem entity, use the getContest()
-        //   of every contest problem in getContestProblems()
+        //   of every contest problem in getContestProblems().
         // * If the entity is a Team (category) entity, get all active
         //   contests and use those that are open to all teams or the
-        //   team (category) belongs to
-        // * If the entity is a contest, use that
-        // * If the entity has a getContest() method, use that
-        // * If the entity has a getContests() method, use that
-        // Otherwise use the currently active contests
+        //   team (category) belongs to.
+        // * If the entity is a contest, use that.
+        // * If the entity has a getContest() method, use that.
+        // * If the entity has a getContests() method, use that.
+        // Otherwise, use the currently active contests.
         $contests = [];
         if ($entity instanceof Team || $entity instanceof TeamCategory) {
             $possibleContests = $dj->getCurrentContests();
@@ -492,5 +493,67 @@ abstract class BaseController extends AbstractController
         $response->headers->set('X-Accel-Buffering', 'no');
         $response->setCallback($callback);
         return $response;
+    }
+
+    protected function judgeRemaining(array $judgings): void
+    {
+        $inProgress = [];
+        $alreadyRequested = [];
+        $invalidJudgings = [];
+        $numRequested = 0;
+        foreach ($judgings as $judging) {
+            $judgingId = $judging->getJudgingid();
+            if ($judging->getResult() === null) {
+                $inProgress[] = $judgingId;
+            } elseif ($judging->getJudgeCompletely()) {
+                $alreadyRequested[] = $judgingId;
+            } elseif (!$judging->getValid()) {
+                $invalidJudgings[] = $judgingId;
+            } else {
+                $numRequested = $this->em->getConnection()->executeStatement(
+                    'UPDATE judgetask SET valid=1'
+                    . ' WHERE jobid=:jobid'
+                    . ' AND judgehostid IS NULL',
+                    [
+                        'jobid' => $judgingId,
+                    ]
+                );
+                $judging->setJudgeCompletely(true);
+
+                $submission = $judging->getSubmission();
+
+                $queueTask = new QueueTask();
+                $queueTask->setJobId($judging->getJudgingid())
+                    ->setPriority(JudgeTask::PRIORITY_LOW)
+                    ->setTeam($submission->getTeam())
+                    ->setTeamPriority((int)$submission->getSubmittime())
+                    ->setStartTime(null);
+                $this->em->persist($queueTask);
+            }
+        }
+        $this->em->flush();
+        if (count($judgings) === 1) {
+            if ($inProgress !== []) {
+                $this->addFlash('warning', 'Please be patient, this judging is still in progress.');
+            }
+            if ($alreadyRequested !== []) {
+                $this->addFlash('warning', 'This judging was already requested to be judged completely.');
+            }
+        } else {
+            if ($inProgress !== []) {
+                $this->addFlash('warning', sprintf('Please be patient, these judgings are still in progress: %s', implode(',', $inProgress)));
+            }
+            if ($alreadyRequested !== []) {
+                $this->addFlash('warning', sprintf('These judgings were already requested to be judged completely: %s', implode(',', $alreadyRequested)));
+            }
+            if ($invalidJudgings !== []) {
+                $this->addFlash('warning', sprintf('These judgings were skipped as they were superseded by other judgings: %s', implode(',', $invalidJudgings)));
+            }
+        }
+        if ($numRequested === 0) {
+            $this->addFlash('warning', 'No more remaining runs to be judged.');
+        } else {
+            $this->addFlash('info', "Requested $numRequested remaining runs to be judged.");
+        }
     }
 }

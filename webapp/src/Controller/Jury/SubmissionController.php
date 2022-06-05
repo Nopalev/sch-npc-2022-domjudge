@@ -14,7 +14,6 @@ use App\Entity\Judging;
 use App\Entity\JudgingRun;
 use App\Entity\Language;
 use App\Entity\Problem;
-use App\Entity\QueueTask;
 use App\Entity\Submission;
 use App\Entity\SubmissionFile;
 use App\Entity\Team;
@@ -27,14 +26,13 @@ use App\Service\EventLogService;
 use App\Service\ScoreboardService;
 use App\Service\SubmissionService;
 use App\Utils\Utils;
-use Doctrine\DBAL\DBALException;
+use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use Doctrine\ORM\Exception\ORMException;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Doctrine\ORM\ORMException;
 use Doctrine\ORM\Query\Expr\Join;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
@@ -57,30 +55,11 @@ use Symfony\Component\Routing\RouterInterface;
  */
 class SubmissionController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var SubmissionService
-     */
-    protected $submissionService;
-
-    /**
-     * @var RouterInterface
-     */
-    protected $router;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected SubmissionService $submissionService;
+    protected RouterInterface $router;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -146,40 +125,6 @@ class SubmissionController extends BaseController
 
         // Load preselected filters
         $filters          = $this->dj->jsonDecode((string)$this->dj->getCookie('domjudge_submissionsfilter') ?: '[]');
-        $filteredProblems = $filteredLanguages = $filteredTeams = $filteredVerdicts = [];
-        if (isset($filters['problem-id'])) {
-            /** @var Problem[] $filteredProblems */
-            $filteredProblems = $this->em->createQueryBuilder()
-                ->from(Problem::class, 'p')
-                ->select('p')
-                ->where('p.probid IN (:problemIds)')
-                ->setParameter(':problemIds', $filters['problem-id'])
-                ->getQuery()
-                ->getResult();
-        }
-        if (isset($filters['language-id'])) {
-            /** @var Language[] $filteredLanguages */
-            $filteredLanguages = $this->em->createQueryBuilder()
-                ->from(Language::class, 'lang')
-                ->select('lang')
-                ->where('lang.langid IN (:langIds)')
-                ->setParameter(':langIds', $filters['language-id'])
-                ->getQuery()
-                ->getResult();
-        }
-        if (isset($filters['team-id'])) {
-            /** @var Team[] $filteredTeams */
-            $filteredTeams = $this->em->createQueryBuilder()
-                ->from(Team::class, 't')
-                ->select('t')
-                ->where('t.teamid IN (:teamIds)')
-                ->setParameter(':teamIds', $filters['team-id'])
-                ->getQuery()
-                ->getResult();
-        }
-        if (isset($filters['result'])) {
-            $filteredVerdicts = $filters['result'];
-        }
 
         $verdictsConfig = $this->dj->getDomjudgeEtcDir() . '/verdicts.php';
         $results = array_keys(include $verdictsConfig);
@@ -195,24 +140,24 @@ class SubmissionController extends BaseController
             'showContest' => count($contests) > 1,
             'hasFilters' => !empty($filters),
             'results' => $results,
-            'filteredProblems' => $filteredProblems,
-            'filteredLanguages' => $filteredLanguages,
-            'filteredTeams' => $filteredTeams,
-            'filteredResults' => $filteredVerdicts,
             'showExternalResult' => $this->config->get('data_source') ==
                 DOMJudgeService::DATA_SOURCE_CONFIGURATION_AND_LIVE_EXTERNAL,
             'showTestcases' => count($submissions) <= $latestCount,
         ];
 
-        // For ajax requests, only return the submission list partial
+        // For ajax requests, only return the submission list partial.
         if ($request->isXmlHttpRequest()) {
             return $this->render('jury/partials/submission_list.html.twig', $data);
         }
 
         // Build the filter form.
-        $form = $this->createForm(SubmissionsFilterType::class, [
+        $filtersForForm                = $filters;
+        $filtersForForm['problem-id']  = $this->em->getRepository(Problem::class)->findBy(['probid' => $filtersForForm['problem-id'] ?? []]);
+        $filtersForForm['language-id'] = $this->em->getRepository(Language::class)->findBy(['langid' => $filtersForForm['language-id'] ?? []]);
+        $filtersForForm['team-id']     = $this->em->getRepository(Team::class)->findBy(['teamid' => $filtersForForm['team-id'] ?? []]);
+        $form = $this->createForm(SubmissionsFilterType::class, array_merge($filtersForForm, [
             "contests" => $contests,
-        ]);
+        ]));
         $data["form"] = $form->createView();
 
         return $this->render('jury/submissions.html.twig', $data, $response);
@@ -221,9 +166,8 @@ class SubmissionController extends BaseController
     /**
      * @Route("/{submitId<\d+>}", name="jury_submission")
      * @throws NonUniqueResultException
-     * @throws Exception
      */
-    public function viewAction(Request $request, int $submitId)
+    public function viewAction(Request $request, int $submitId): Response
     {
         $judgingId   = $request->query->get('jid');
         $rejudgingId = $request->query->get('rejudgingid');
@@ -256,7 +200,7 @@ class SubmissionController extends BaseController
             ->leftJoin('s.contest_problem', 'cp')
             ->select('s', 't', 'p', 'l', 'c', 'partial f.{submitfileid, filename}', 'cp', 'ej')
             ->andWhere('s.submitid = :submitid')
-            ->setParameter(':submitid', $submitId)
+            ->setParameter('submitid', $submitId)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -271,8 +215,8 @@ class SubmissionController extends BaseController
             ->select('j', 'r', 'MAX(jr.runtime) AS max_runtime')
             ->andWhere('j.contest = :contest')
             ->andWhere('j.submission = :submission')
-            ->setParameter(':contest', $submission->getContest())
-            ->setParameter(':submission', $submission)
+            ->setParameter('contest', $submission->getContest())
+            ->setParameter('submission', $submission)
             ->groupBy('j.judgingid')
             ->orderBy('j.starttime')
             ->addOrderBy('j.judgingid')
@@ -280,15 +224,11 @@ class SubmissionController extends BaseController
             ->getResult();
 
         /** @var Judging[] $judgings */
-        $judgings    = array_map(function ($data) {
-            return $data[0];
-        }, $judgingData);
-        $maxRunTimes = array_map(function ($data) {
-            return $data['max_runtime'];
-        }, $judgingData);
+        $judgings    = array_map(fn($data) => $data[0], $judgingData);
+        $maxRunTimes = array_map(fn($data) => $data['max_runtime'], $judgingData);
 
         $selectedJudging = null;
-        // Find the selected judging
+        // Find the selected judging.
         if ($judgingId !== null) {
             $selectedJudging = $judgings[$judgingId] ?? null;
         } else {
@@ -324,8 +264,8 @@ class SubmissionController extends BaseController
                 ->leftJoin('t.external_runs', 'er', Join::WITH, 'er.external_judgement = :judging')
                 ->select('t', 'er')
                 ->andWhere('t.problem = :problem')
-                ->setParameter(':judging', $externalJudgement)
-                ->setParameter(':problem', $submission->getProblem())
+                ->setParameter('judging', $externalJudgement)
+                ->setParameter('problem', $submission->getProblem())
                 ->orderBy('t.ranknumber');
 
             $externalRunResults = $queryBuilder
@@ -343,7 +283,7 @@ class SubmissionController extends BaseController
             ->select('jh.judgehostid', 'jh.hostname')
             ->andWhere('jt.judgehost IS NOT NULL')
             ->andWhere('jt.jobid = :judging')
-            ->setParameter(':judging', $selectedJudging)
+            ->setParameter('judging', $selectedJudging)
             ->groupBy('jh.hostname')
             ->orderBy('jh.hostname')
             ->getQuery()
@@ -365,8 +305,8 @@ class SubmissionController extends BaseController
                 ->leftJoin('jr.output', 'jro')
                 ->select('t', 'jr', 'tc.image_thumb AS image_thumb', 'jro.metadata')
                 ->andWhere('t.problem = :problem')
-                ->setParameter(':judging', $selectedJudging)
-                ->setParameter(':problem', $submission->getProblem())
+                ->setParameter('judging', $selectedJudging)
+                ->setParameter('problem', $submission->getProblem())
                 ->orderBy('t.ranknumber');
             if ($outputDisplayLimit < 0) {
                 $queryBuilder
@@ -383,8 +323,8 @@ class SubmissionController extends BaseController
                     ->addSelect('TRUNCATE(jro.output_diff, :outputDisplayLimit, :outputTruncateMessage) AS output_diff')
                     ->addSelect('TRUNCATE(jro.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
                     ->addSelect('TRUNCATE(jro.output_system, :outputDisplayLimit, :outputTruncateMessage) AS output_system')
-                    ->setParameter(':outputDisplayLimit', $outputDisplayLimit)
-                    ->setParameter(':outputTruncateMessage', $outputTruncateMessage);
+                    ->setParameter('outputDisplayLimit', $outputDisplayLimit)
+                    ->setParameter('outputTruncateMessage', $outputTruncateMessage);
             }
 
             $runResults = $queryBuilder
@@ -395,7 +335,7 @@ class SubmissionController extends BaseController
                 ->from(JudgeTask::class, 'jt')
                 ->select('jt.testcase_id')
                 ->andWhere('jt.jobid = :judging')
-                ->setParameter(':judging', $selectedJudging)
+                ->setParameter('judging', $selectedJudging)
                 ->orderBy('jt.judgetaskid')
                 ->getQuery()
                 ->getScalarResult();
@@ -454,9 +394,9 @@ class SubmissionController extends BaseController
                 ->andWhere('s.team = :team')
                 ->andWhere('s.problem = :problem')
                 ->andWhere('s.submittime < :submittime')
-                ->setParameter(':team', $submission->getTeam())
-                ->setParameter(':problem', $submission->getProblem())
-                ->setParameter(':submittime', $submission->getSubmittime())
+                ->setParameter('team', $submission->getTeam())
+                ->setParameter('problem', $submission->getProblem())
+                ->setParameter('submittime', $submission->getSubmittime())
                 ->orderBy('s.submittime', 'DESC')
                 ->setMaxResults(1)
                 ->getQuery()
@@ -473,7 +413,7 @@ class SubmissionController extends BaseController
                 ->select('j')
                 ->andWhere('j.submission = :submission')
                 ->andWhere('j.valid = 1')
-                ->setParameter(':submission', $lastSubmission)
+                ->setParameter('submission', $lastSubmission)
                 ->orderBy('j.judgingid', 'DESC')
                 ->setMaxResults(1)
                 ->getQuery()
@@ -487,8 +427,8 @@ class SubmissionController extends BaseController
                     ->leftJoin('t.judging_runs', 'jr', Join::WITH, 'jr.judging = :judging')
                     ->select('t', 'jr')
                     ->andWhere('t.problem = :problem')
-                    ->setParameter(':judging', $lastJudging)
-                    ->setParameter(':problem', $submission->getProblem())
+                    ->setParameter('judging', $lastJudging)
+                    ->setParameter('problem', $submission->getProblem())
                     ->orderBy('t.ranknumber')
                     ->getQuery()
                     ->getResult();
@@ -502,7 +442,7 @@ class SubmissionController extends BaseController
             $numActiveJudgehosts = (int)$this->em->createQueryBuilder()
                 ->from(Judgehost::class, 'j')
                 ->select('count(j.judgehostid)')
-                ->andWhere('j.active = 1')
+                ->andWhere('j.enabled = 1')
                 ->getQuery()
                 ->getSingleScalarResult();
             if ($numActiveJudgehosts == 0) {
@@ -527,8 +467,8 @@ class SubmissionController extends BaseController
                 ->andWhere('jt.type = :type')
                 ->andWhere('jt.jobid = :judgingid')
                 ->andWhere('jt.starttime IS NULL')
-                ->setParameter(':type', JudgeTaskType::DEBUG_INFO)
-                ->setParameter(':judgingid', $judging->getJudgingid())
+                ->setParameter('type', JudgeTaskType::DEBUG_INFO)
+                ->setParameter('judgingid', $judging->getJudgingid())
                 ->getQuery()
                 ->getSingleScalarResult();
         }
@@ -567,8 +507,6 @@ class SubmissionController extends BaseController
 
     /**
      * @Route("/request-full-debug/{jid}", name="request_full_debug")
-     * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function requestFullDebug(Request $request, Judging $jid): RedirectResponse
     {
@@ -594,7 +532,7 @@ class SubmissionController extends BaseController
                     ->setJobId($jid->getJudgingid())
                     ->setUuid($jid->getUuid())
                     ->setRunScriptId($executable->getImmutableExecId())
-                    ->setRunConfig(json_encode(['hash' => $executable->getHash()]));
+                    ->setRunConfig($this->dj->jsonEncode(['hash' => $executable->getHash()]));
                 $this->em->persist($judgeTask);
             }
             $this->em->flush();
@@ -607,8 +545,6 @@ class SubmissionController extends BaseController
 
     /**
      * @Route("/download-full-debug/{debug_package_id}", name="download_full_debug")
-     * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function downloadFullDebug(DebugPackage $debugPackage): StreamedResponse
     {
@@ -621,8 +557,6 @@ class SubmissionController extends BaseController
 
     /**
      * @Route("/request-output/{jid}/{jrid}", name="request_output")
-     * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function requestOutput(Request $request, Judging $jid, JudgingRun $jrid): RedirectResponse
     {
@@ -721,8 +655,8 @@ class SubmissionController extends BaseController
                 ->select('file')
                 ->andWhere('file.ranknumber = :ranknumber')
                 ->andWhere('file.submission = :submission')
-                ->setParameter(':ranknumber', $request->query->get('fetch'))
-                ->setParameter(':submission', $submission)
+                ->setParameter('ranknumber', $request->query->get('fetch'))
+                ->setParameter('submission', $submission)
                 ->getQuery()
                 ->getOneOrNullResult();
             if (!$file) {
@@ -745,7 +679,7 @@ class SubmissionController extends BaseController
             ->from(SubmissionFile::class, 'file')
             ->select('file')
             ->andWhere('file.submission = :submission')
-            ->setParameter(':submission', $submission)
+            ->setParameter('submission', $submission)
             ->orderBy('file.ranknumber')
             ->getQuery()
             ->getResult();
@@ -761,7 +695,7 @@ class SubmissionController extends BaseController
                 ->from(SubmissionFile::class, 'file')
                 ->select('file')
                 ->andWhere('file.submission = :submission')
-                ->setParameter(':submission', $originalSubmission)
+                ->setParameter('submission', $originalSubmission)
                 ->orderBy('file.ranknumber')
                 ->getQuery()
                 ->getResult();
@@ -774,10 +708,10 @@ class SubmissionController extends BaseController
                 ->andWhere('s.language = :langid')
                 ->andWhere('s.submittime < :submittime')
                 ->andWhere('s.originalSubmission = :origsubmitid')
-                ->setParameter(':probid', $submission->getProblem())
-                ->setParameter(':langid', $submission->getLanguage())
-                ->setParameter(':submittime', $submission->getSubmittime())
-                ->setParameter(':origsubmitid', $submission->getOriginalSubmission())
+                ->setParameter('probid', $submission->getProblem())
+                ->setParameter('langid', $submission->getLanguage())
+                ->setParameter('submittime', $submission->getSubmittime())
+                ->setParameter('origsubmitid', $submission->getOriginalSubmission())
                 ->orderBy('s.submittime', 'DESC')
                 ->setMaxResults(1)
                 ->getQuery()
@@ -790,10 +724,10 @@ class SubmissionController extends BaseController
                 ->andWhere('s.problem = :probid')
                 ->andWhere('s.language = :langid')
                 ->andWhere('s.submittime < :submittime')
-                ->setParameter(':teamid', $submission->getTeam())
-                ->setParameter(':probid', $submission->getProblem())
-                ->setParameter(':langid', $submission->getLanguage())
-                ->setParameter(':submittime', $submission->getSubmittime())
+                ->setParameter('teamid', $submission->getTeam())
+                ->setParameter('probid', $submission->getProblem())
+                ->setParameter('langid', $submission->getLanguage())
+                ->setParameter('submittime', $submission->getSubmittime())
                 ->orderBy('s.submittime', 'DESC')
                 ->setMaxResults(1)
                 ->getQuery()
@@ -805,7 +739,7 @@ class SubmissionController extends BaseController
             ->from(SubmissionFile::class, 'file')
             ->select('file')
             ->andWhere('file.submission = :submission')
-            ->setParameter(':submission', $oldSubmission)
+            ->setParameter('submission', $oldSubmission)
             ->orderBy('file.ranknumber')
             ->getQuery()
             ->getResult();
@@ -827,10 +761,8 @@ class SubmissionController extends BaseController
 
     /**
      * @Route("/{submission}/edit-source", name="jury_submission_edit_source")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function editSourceAction(Request $request, Submission $submission)
+    public function editSourceAction(Request $request, Submission $submission): Response
     {
         if (!$this->dj->getUser()->getTeam() || !$this->dj->checkrole('team')) {
             $this->addFlash('danger', 'You cannot re-submit code without being a team.');
@@ -845,7 +777,7 @@ class SubmissionController extends BaseController
             ->from(SubmissionFile::class, 'file')
             ->select('file')
             ->andWhere('file.submission = :submission')
-            ->setParameter(':submission', $submission)
+            ->setParameter('submission', $submission)
             ->orderBy('file.ranknumber')
             ->getQuery()
             ->getResult();
@@ -869,7 +801,7 @@ class SubmissionController extends BaseController
                         ->join('p.contest_problems', 'cp')
                         ->andWhere('cp.allowSubmit = 1')
                         ->andWhere('cp.contest = :contest')
-                        ->setParameter(':contest', $submission->getContest())
+                        ->setParameter('contest', $submission->getContest())
                         ->orderBy('p.name');
                 },
             ])
@@ -956,7 +888,6 @@ class SubmissionController extends BaseController
     /**
      * @Route("/{judgingId<\d+>}/request-remaining", name="jury_submission_request_remaining", methods={"POST"})
      * @throws DBALException
-     * @throws Exception
      */
     public function requestRemainingRuns(Request $request, int $judgingId): RedirectResponse
     {
@@ -965,38 +896,8 @@ class SubmissionController extends BaseController
         if ($judging === null) {
             throw new BadRequestHttpException("Unknown judging with '$judgingId' requested.");
         }
+        $this->judgeRemaining([$judging]);
 
-        if ($judging->getResult() === null) {
-            $this->addFlash('warning', 'Please be patient, this judging is still in progress.');
-        } elseif ($judging->getJudgeCompletely()) {
-            $this->addFlash('warning', 'This judging was already requested to be judged completely.');
-        } else {
-            $numRequested = $this->em->getConnection()->executeUpdate(
-                'UPDATE judgetask SET valid=1'
-                . ' WHERE jobid=:jobid'
-                . ' AND judgehostid IS NULL',
-                [
-                    ':jobid' => $judgingId,
-                ]
-            );
-            $judging->setJudgeCompletely(true);
-            $this->em->flush();
-
-            $submission = $judging->getSubmission();
-            $queueTask = new QueueTask();
-            $queueTask->setJobId($judging->getJudgingid())
-                ->setPriority(JudgeTask::PRIORITY_LOW)
-                ->setTeam($submission->getTeam())
-                ->setTeamPriority((int)$submission->getSubmittime())
-                ->setStartTime(null);
-            $this->em->persist($queueTask);
-            $this->em->flush();
-            if ($numRequested == 0) {
-                $this->addFlash('warning', 'No more remaining runs to be judged.');
-            } else {
-                $this->addFlash('info', "Requested $numRequested remaining runs to be judged.");
-            }
-        }
         return $this->redirectToLocalReferrer($this->router, $request,
             $this->generateUrl('jury_submission_by_judging', ['jid' => $judgingId])
         );
@@ -1006,7 +907,6 @@ class SubmissionController extends BaseController
      * @Route("/{submitId<\d+>}/update-status", name="jury_submission_update_status", methods={"POST"})
      * @IsGranted("ROLE_ADMIN")
      * @throws DBALException
-     * @throws Exception
      */
     public function updateStatusAction(
         EventLogService $eventLogService,
@@ -1053,7 +953,7 @@ class SubmissionController extends BaseController
         Request $request,
         int $judgingId
     ): RedirectResponse {
-        $this->em->transactional(function () use ($eventLogService, $request, $judgingId) {
+        $this->em->wrapInTransaction(function () use ($eventLogService, $request, $judgingId) {
             /** @var Judging $judging */
             $judging  = $this->em->getRepository(Judging::class)->find($judgingId);
             $verified = $request->request->getBoolean('verified');
@@ -1069,7 +969,7 @@ class SubmissionController extends BaseController
 
             if ((bool)$this->config->get('verification_required')) {
                 // Log to event table (case of no verification required is handled
-                // in the REST API API/JudgehostController::addJudgingRunAction
+                // in the REST API JudgehostController::addJudgingRunAction).
                 $eventLogService->log('judging', $judging->getJudgingid(), 'update', $judging->getContest()->getCid());
             }
         });
@@ -1078,7 +978,8 @@ class SubmissionController extends BaseController
             $this->em->clear();
             /** @var Judging $judging */
             $judging = $this->em->getRepository(Judging::class)->find($judgingId);
-            // We need to update the score for all teams for this problem, since the first to solve might now have changed
+            // We need to update the score for all teams for this problem, since the first to solve might now
+            // have changed.
             $teamsQueryBuilder = $this->em->createQueryBuilder()
                                      ->from(Team::class, 't')
                                      ->select('t')
@@ -1089,7 +990,7 @@ class SubmissionController extends BaseController
                     ->join('t.category', 'cat')
                     ->leftJoin('cat.contests', 'cc')
                     ->andWhere('c.cid = :cid OR cc.cid = :cid')
-                    ->setParameter(':cid', $judging->getContest()->getCid());
+                    ->setParameter('cid', $judging->getContest()->getCid());
             }
             /** @var Team[] $teams */
             $teams = $teamsQueryBuilder->getQuery()->getResult();
@@ -1122,7 +1023,7 @@ class SubmissionController extends BaseController
     ): RedirectResponse {
         /** @var ExternalJudgement $judgement */
         $judgement  = $this->em->getRepository(ExternalJudgement::class)->find($extjudgementid);
-        $this->em->transactional(function () use ($eventLogService, $request, $judgement) {
+        $this->em->wrapInTransaction(function () use ($eventLogService, $request, $judgement) {
             $verified = $request->request->getBoolean('verified');
             $comment  = $request->request->get('comment');
             $judgement
@@ -1148,17 +1049,17 @@ class SubmissionController extends BaseController
     protected function determineFileChanged(array $files, array $oldFiles): array
     {
         $result = [
-            'added' => [],
-            'removed' => [],
-            'changed' => [],
-            'changedfiles' => [], // These will be shown, so we will add pairs of files here
-            'unchanged' => [],
+            'changed'      => [],
+            'changedfiles' => [], // These will be shown, so we will add pairs of files here.
+            'unchanged'    => [],
         ];
 
-        $newFilenames = [];
-        $oldFilenames = [];
+        $newFilenames = array_map(fn($f) => $f->getFilename(), $files);
+        $oldFilenames = array_map(fn($f) => $f->getFilename(), $oldFiles);
+        $result['added']   = array_diff($newFilenames, $oldFilenames);
+        $result['removed'] = array_diff($oldFilenames, $newFilenames);
+
         foreach ($files as $newfile) {
-            $oldFilenames = [];
             foreach ($oldFiles as $oldFile) {
                 if ($newfile->getFilename() === $oldFile->getFilename()) {
                     if ($oldFile->getSourcecode() === $newfile->getSourcecode()) {
@@ -1168,15 +1069,10 @@ class SubmissionController extends BaseController
                         $result['changedfiles'][] = [$newfile, $oldFile];
                     }
                 }
-                $oldFilenames[] = $oldFile->getFilename();
             }
-            $newFilenames[] = $newfile->getFilename();
         }
 
-        $result['added']   = array_diff($newFilenames, $oldFilenames);
-        $result['removed'] = array_diff($oldFilenames, $newFilenames);
-
-        // Special case: if we have exactly one file now and before but the filename is different, use that for diffing
+        // Special case: if there's just a single file (before and after) that has been renamed, use that for diffing.
         if (count($result['added']) === 1 && count($result['removed']) === 1 && empty($result['changed'])) {
             $result['added']        = [];
             $result['removed']      = [];
@@ -1187,6 +1083,9 @@ class SubmissionController extends BaseController
         return $result;
     }
 
+    /**
+     * @param Judging|ExternalJudgement|null $judging
+     */
     protected function processClaim($judging, Request $request, ?string &$claimWarning) : ?RedirectResponse
     {
         $user   = $this->dj->getUser();

@@ -26,21 +26,21 @@ config: $(SUBST_CONFIGS)
 
 domserver: apache.conf nginx-conf nginx-conf-inner $(SECRETS)
 
-judgehost:
+judgehost: restapi.secret
 
 $(SECRETS):
 	./gen_all_secrets $(subst 1,-q,$(QUIET))
 
 install-domserver:
 	$(INSTALL_DATA) -t $(DESTDIR)$(domserver_etcdir) \
-		apache.conf nginx-conf nginx-conf-inner domserver-static.php domjudge-fpm.conf shadowing.yaml.dist docs.yaml.dist
+		apache.conf nginx-conf nginx-conf-inner domserver-static.php domjudge-fpm.conf docs.yaml.dist
 	$(INSTALL_PROG) -t $(DESTDIR)$(domserver_etcdir) \
 		genadminpassword gendbpasswords genrestapicredentials gensymfonysecret gen_all_secrets
 	$(INSTALL_DATA) -t $(DESTDIR)$(domserver_etcdir) \
 		verdicts.php db-config.yaml
 # Password files are installed from root Makefile.
 
-install-judgehost:
+install-judgehost: judgehost-static.php sudoers-domjudge
 	$(INSTALL_DATA) -t $(DESTDIR)$(judgehost_etcdir) \
 		judgehost-static.php sudoers-domjudge genrestapicredentials
 	$(INSTALL_DATA) -t $(DESTDIR)$(judgehost_etcdir) \

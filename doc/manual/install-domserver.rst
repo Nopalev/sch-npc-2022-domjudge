@@ -24,7 +24,7 @@ System requirements
 
 Software requirements
 `````````````````````
-* A web server with support for PHP >= 7.2.5 and the ``mysqli``, ``curl``, ``gd``,
+* A web server with support for PHP >= 7.4.0 and the ``mysqli``, ``curl``, ``gd``,
   ``mbstring``, ``intl``, ``zip``, ``xml`` and ``json`` extensions for PHP.
 * MySQL or MariaDB database. This can be on the same machine, but for
   advanced setups can also run on a dedicated machine.
@@ -48,6 +48,9 @@ distributions like CentOS and Fedora::
 
 Installation
 ------------
+These instructions assume a `tarball <https://www.domjudge.org/download>`_, see :ref:`this section <bootstrap>`
+for instructions to build from git sources.
+
 The DOMjudge build/install system consists of a ``configure``
 script and makefiles, but when installing it, some more care has to be
 taken than simply running ``./configure && make && make install``.

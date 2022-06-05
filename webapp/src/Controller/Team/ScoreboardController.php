@@ -8,7 +8,6 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\ScoreboardService;
 use Doctrine\ORM\EntityManagerInterface;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,29 +25,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ScoreboardController extends BaseController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected ScoreboardService $scoreboardService;
+    protected EntityManagerInterface $em;
 
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * ScoreboardController constructor.
-     */
     public function __construct(
         DOMJudgeService $dj,
         ConfigurationService $config,
@@ -63,9 +44,8 @@ class ScoreboardController extends BaseController
 
     /**
      * @Route("/scoreboard", name="team_scoreboard")
-     * @throws Exception
      */
-    public function scoreboardAction(Request $request) : Response
+    public function scoreboardAction(Request $request): Response
     {
         $user       = $this->dj->getUser();
         $response   = new Response();
@@ -85,11 +65,14 @@ class ScoreboardController extends BaseController
 
     /**
      * @Route("/team/{teamId<\d+>}", name="team_team")
-     * @throws Exception
      */
-    public function teamAction(Request $request, int $teamId) : Response
+    public function teamAction(Request $request, int $teamId): Response
     {
+        /** @var Team|null $team */
         $team             = $this->em->getRepository(Team::class)->find($teamId);
+        if ($team && $team->getCategory() && !$team->getCategory()->getVisible() && $teamId !== $this->dj->getUser()->getTeamId()) {
+            $team = null;
+        }
         $showFlags        = (bool)$this->config->get('show_flags');
         $showAffiliations = (bool)$this->config->get('show_affiliations');
         $data             = [

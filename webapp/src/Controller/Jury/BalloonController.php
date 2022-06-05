@@ -12,7 +12,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\RedirectResponse;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Annotation\Route;
 
@@ -22,25 +21,10 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class BalloonController extends AbstractController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -57,9 +41,8 @@ class BalloonController extends AbstractController
     /**
      * @Route("", name="jury_balloons")
      */
-    public function indexAction(Request $request, BalloonService $balloonService): Response
+    public function indexAction(BalloonService $balloonService): Response
     {
-
         $contest = $this->dj->getCurrentContest();
         if(is_null($contest)) {
             return $this->render('jury/balloons.html.twig');
@@ -95,7 +78,7 @@ class BalloonController extends AbstractController
                 ->from(TeamAffiliation::class, 'a')
                 ->select('a')
                 ->where('a.affilid IN (:affilIds)')
-                ->setParameter(':affilIds', $filters['affiliation-id'])
+                ->setParameter('affilIds', $filters['affiliation-id'])
                 ->getQuery()
                 ->getResult();
         }
@@ -105,7 +88,7 @@ class BalloonController extends AbstractController
                 ->from(Team::class, 'a')
                 ->select('a')
                 ->where('a.room IN (:rooms)')
-                ->setParameter(':rooms', $filters['location-str'])
+                ->setParameter('rooms', $filters['location-str'])
                 ->getQuery()
                 ->getResult();
         }
@@ -127,7 +110,7 @@ class BalloonController extends AbstractController
     /**
      * @Route("/{balloonId}/done", name="jury_balloons_setdone")
      */
-    public function setDoneAction(Request $request, int $balloonId, BalloonService $balloonService): RedirectResponse
+    public function setDoneAction(int $balloonId, BalloonService $balloonService): RedirectResponse
     {
         $balloonService->setDone($balloonId);
 

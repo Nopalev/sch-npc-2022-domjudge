@@ -22,27 +22,10 @@ class ICPCCmsService
     const WS_TOKEN_URL = '/auth/realms/cm5/protocol/openid-connect/token';
     const WS_CLICS = '/cm5-contest-rest/rest/contest/export/CLICS/CONTEST/';
 
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected DOMJudgeService $dj;
+    protected EntityManagerInterface $em;
+    protected HttpClientInterface $client;
 
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var HttpClientInterface
-     */
-    protected $client;
-
-    /**
-     * ICPCCmsService constructor.
-     * @param DOMJudgeService        $dj
-     * @param EntityManagerInterface $em
-     * @param                        $domjudgeVersion
-     */
     public function __construct(
         DOMJudgeService $dj,
         EntityManagerInterface $em,
@@ -63,17 +46,13 @@ class ICPCCmsService
 
     /**
      * Import teams from the ICPC CMS
-     * @param string      $token
-     * @param string      $contest
-     * @param string|null $message
-     * @return bool
      * @throws ClientExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ServerExceptionInterface
      * @throws TransportExceptionInterface
      * @throws DecodingExceptionInterface
      */
-    public function importTeams(string $token, string $contest, string &$message = null): bool
+    public function importTeams(string $token, string $contest, ?string &$message = null): bool
     {
         $bearerToken = $this->getBearerToken($token, $message);
         if ($bearerToken === null) {
@@ -92,7 +71,7 @@ class ICPCCmsService
         }
         if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
             $message = sprintf('Unknown error while retrieving data from %s, status code: %d, %s',
-                               BASE_URI, $response->getStatusCode(), $response->getContent(false));
+                               static::BASE_URI, $response->getStatusCode(), $response->getContent(false));
             return false;
         }
 
@@ -110,7 +89,7 @@ class ICPCCmsService
             $siteName = $group['groupName'];
             foreach ($group['team'] as $teamData) {
                 $institutionName = $teamData['institutionName'];
-                // Note: affiliations are not updated and not deleted even if all teams have canceled
+                // Note: affiliations are not updated and not deleted even if all teams have canceled.
                 $affiliation = $this->em->getRepository(TeamAffiliation::class)->findOneBy(['name' => $institutionName]);
                 if ($affiliation === null) {
                     $shortName   = isset($teamData['institutionShortName']) ? $teamData['institutionShortName'] : $institutionName;
@@ -138,7 +117,7 @@ class ICPCCmsService
                         ->setCategory($participants)
                         ->setAffiliation($affiliation)
                         ->setEnabled($enabled)
-                        ->setComments('Status: ' . $teamData['status'])
+                        ->setInternalComments('Status: ' . $teamData['status'])
                         ->setIcpcid($teamData['teamId'])
                         ->setRoom($siteName);
                     $this->em->persist($team);
@@ -160,7 +139,7 @@ class ICPCCmsService
                         ->setCategory($participants)
                         ->setAffiliation($affiliation)
                         ->setEnabled($enabled)
-                        ->setComments('Status: ' . $teamData['status'])
+                        ->setInternalComments('Status: ' . $teamData['status'])
                         ->setIcpcid($teamData['teamId'])
                         ->setRoom($siteName);
 
@@ -179,12 +158,8 @@ class ICPCCmsService
 
     /**
      * Upload standings to the ICPC CMS
-     * @param string      $token
-     * @param string      $contest
-     * @param string|null $message
-     * @return bool
      */
-    public function uploadStandings(string $token, string $contest, string &$message = null)
+    public function uploadStandings(string $token, string $contest, ?string &$message = null): bool
     {
         // TODO: reimplement
 
@@ -193,17 +168,14 @@ class ICPCCmsService
     }
 
     /**
-     * Convert the given web service token to a bearer token
-     * @param string      $token
-     * @param string|null $message
-     * @return string|null
+     * Convert the given web service token to a bearer token.
      * @throws ClientExceptionInterface
      * @throws RedirectionExceptionInterface
      * @throws ServerExceptionInterface
      * @throws TransportExceptionInterface
      * @throws DecodingExceptionInterface
      */
-    protected function getBearerToken(string $token, string &$message = null)
+    protected function getBearerToken(string $token, ?string &$message = null): ?string
     {
         $response = $this->client->request('POST', self::WS_TOKEN_URL, [
             'body' => [
@@ -221,7 +193,7 @@ class ICPCCmsService
         }
         if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
             $message = sprintf('Unknown error while retrieving data from %s, status code: %d, %s',
-                               BASE_URI, $response->getStatusCode(), $response->getContent(false));
+                               static::BASE_URI, $response->getStatusCode(), $response->getContent(false));
             return null;
         }
 

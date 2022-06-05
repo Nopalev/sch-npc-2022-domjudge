@@ -12,10 +12,7 @@ use JMS\Serializer\Metadata\StaticPropertyMetadata;
 
 class ContestProblemVisitor implements EventSubscriberInterface
 {
-    /**
-     * @inheritdoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             [
@@ -27,11 +24,7 @@ class ContestProblemVisitor implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ObjectEvent $event
-     * @throws \Exception
-     */
-    public function onPostSerialize(ObjectEvent $event)
+    public function onPostSerialize(ObjectEvent $event): void
     {
         /** @var JsonSerializationVisitor $visitor */
         $visitor = $event->getVisitor();

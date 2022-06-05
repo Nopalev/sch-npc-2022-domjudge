@@ -3,7 +3,6 @@
 namespace App\Entity;
 
 use App\Service\EventLogService;
-use Exception;
 
 /**
  * Class BaseApiEntity
@@ -16,8 +15,6 @@ abstract class BaseApiEntity
 {
     /**
      * Get the API ID field name for this entity.
-     *
-     * @throws Exception
      */
     public function getApiIdField(EventLogService $eventLogService): string
     {
@@ -26,9 +23,6 @@ abstract class BaseApiEntity
 
     /**
      * Get the API ID for this entity.
-     *
-     * @return string
-     * @throws Exception
      */
     public function getApiId(EventLogService $eventLogService): string
     {

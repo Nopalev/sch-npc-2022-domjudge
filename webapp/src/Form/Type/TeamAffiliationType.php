@@ -2,7 +2,6 @@
 
 namespace App\Form\Type;
 
-use App\Entity\Contest;
 use App\Entity\TeamAffiliation;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
@@ -12,23 +11,18 @@ use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
 use Symfony\Component\Form\Extension\Core\Type\FileType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
+use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\Form\FormEvent;
 use Symfony\Component\Form\FormEvents;
 use Symfony\Component\Intl\Countries;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Validator\Constraints\Regex;
 
 class TeamAffiliationType extends AbstractExternalIdEntityType
 {
-    /**
-     * @var ConfigurationService
-     */
-    protected $configuration;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected ConfigurationService $configuration;
+    protected DOMJudgeService $dj;
 
     public function __construct(
         EventLogService $eventLogService,
@@ -40,12 +34,7 @@ class TeamAffiliationType extends AbstractExternalIdEntityType
         $this->dj = $dj;
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     * @throws \Exception
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $countries = [];
         foreach (Countries::getAlpha3Codes() as $alpha3) {
@@ -54,6 +43,19 @@ class TeamAffiliationType extends AbstractExternalIdEntityType
         }
 
         $this->addExternalIdField($builder, TeamAffiliation::class);
+        $builder->add('icpcid', TextType::class, [
+            'label'       => 'ICPC ID',
+            'required'    => false,
+            'help'        => 'Optional ID of the organization in the ICPC CMS.',
+            'constraints' => [
+                new Regex(
+                    [
+                        'pattern' => '/^[a-zA-Z0-9_-]+$/i',
+                        'message' => 'Only letters, numbers, dashes and underscores are allowed.',
+                    ]
+                )
+            ]
+        ]);
         $builder->add('shortname');
         $builder->add('name');
         if ($this->configuration->get('show_flags')) {
@@ -63,7 +65,8 @@ class TeamAffiliationType extends AbstractExternalIdEntityType
                 'placeholder' => 'No country',
             ]);
         }
-        $builder->add('comments', TextareaType::class, [
+        $builder->add('internalcomments', TextareaType::class, [
+            'label' => 'Internal comments (jury viewable only)',
             'required' => false,
             'attr' => [
                 'rows' => 6,
@@ -93,7 +96,7 @@ class TeamAffiliationType extends AbstractExternalIdEntityType
     }
 
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => TeamAffiliation::class]);
     }

@@ -15,7 +15,6 @@ use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\Query\Expr\Join;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -37,30 +36,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ClarificationController extends BaseController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var FormFactoryInterface
-     */
-    protected $formFactory;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EntityManagerInterface $em;
+    protected EventLogService $eventLogService;
+    protected FormFactoryInterface $formFactory;
 
     public function __construct(
         DOMJudgeService $dj,
@@ -79,9 +59,8 @@ class ClarificationController extends BaseController
     /**
      * @Route("/clarifications/{clarId<\d+>}", name="team_clarification")
      * @throws NonUniqueResultException
-     * @throws Exception
      */
-    public function viewAction(Request $request, int $clarId) : Response
+    public function viewAction(Request $request, int $clarId): Response
     {
         $categories = $this->config->get('clar_categories');
         $user       = $this->dj->getUser();
@@ -96,8 +75,8 @@ class ClarificationController extends BaseController
             ->select('c, p, co')
             ->andWhere('c.contest = :contest')
             ->andWhere('c.clarid = :clarId')
-            ->setParameter(':contest', $contest)
-            ->setParameter(':clarId', $clarId)
+            ->setParameter('contest', $contest)
+            ->setParameter('clarId', $clarId)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -137,12 +116,12 @@ class ClarificationController extends BaseController
             throw new HttpException(401, 'Permission denied');
         }
 
-        // Get the "parent" message if we have one
+        // Get the "parent" message if we have one.
         if ($clarification->getInReplyTo()) {
             $clarification = $clarification->getInReplyTo();
         }
 
-        // Mark clarification as read
+        // Mark clarification as read.
         $team->removeUnreadClarification($clarification);
         foreach ($clarification->getReplies() as $reply) {
             $team->removeUnreadClarification($reply);
@@ -165,9 +144,8 @@ class ClarificationController extends BaseController
 
     /**
      * @Route("/clarifications/add", name="team_clarification_add")
-     * @throws Exception
      */
-    public function addAction(Request $request) : Response
+    public function addAction(Request $request): Response
     {
         $categories = $this->config->get('clar_categories');
         $user       = $this->dj->getUser();
@@ -208,7 +186,7 @@ class ClarificationController extends BaseController
         Team $team
     ): void {
         $formData = $form->getData();
-        // First part will always be the contest ID, as Symfony will validate this
+        // First part will always be the contest ID, as Symfony will validate this.
         [, $problemId] = explode('-', $formData['subject']);
         $problem = null;
         $category = null;

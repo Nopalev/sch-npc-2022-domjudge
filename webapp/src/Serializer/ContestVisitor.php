@@ -7,7 +7,6 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Utils\Utils;
-use Exception;
 use JMS\Serializer\EventDispatcher\Events;
 use JMS\Serializer\EventDispatcher\EventSubscriberInterface;
 use JMS\Serializer\EventDispatcher\ObjectEvent;
@@ -21,28 +20,10 @@ use JMS\Serializer\Metadata\StaticPropertyMetadata;
  */
 class ContestVisitor implements EventSubscriberInterface
 {
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
+    protected ConfigurationService $config;
+    protected DOMJudgeService $dj;
+    protected EventLogService $eventLogService;
 
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * ContestVisitor constructor.
-     *
-     * @param ConfigurationService $config
-     * @param DOMJudgeService      $dj
-     * @param EventLogService      $eventLogService
-     */
     public function __construct(
         ConfigurationService $config,
         DOMJudgeService $dj,
@@ -53,10 +34,7 @@ class ContestVisitor implements EventSubscriberInterface
         $this->eventLogService = $eventLogService;
     }
 
-    /**
-     * @inheritdoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             [
@@ -68,12 +46,7 @@ class ContestVisitor implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ObjectEvent $event
-     *
-     * @throws Exception
-     */
-    public function onPostSerialize(ObjectEvent $event)
+    public function onPostSerialize(ObjectEvent $event): void
     {
         /** @var JsonSerializationVisitor $visitor */
         $visitor = $event->getVisitor();
@@ -90,7 +63,7 @@ class ContestVisitor implements EventSubscriberInterface
         $id = $contest->getApiId($this->eventLogService);
 
         // Banner
-        if ($banner = $this->dj->assetPath((string)$id, 'contest', true)) {
+        if ($banner = $this->dj->assetPath($id, 'contest', true)) {
             $imageSize = Utils::getImageSize($banner);
 
             $route = $this->dj->apiRelativeUrl(

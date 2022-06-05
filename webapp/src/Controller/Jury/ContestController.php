@@ -9,6 +9,7 @@ use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Judgehost;
 use App\Entity\JudgeTask;
+use App\Entity\Judging;
 use App\Entity\Language;
 use App\Entity\Problem;
 use App\Entity\RemovedInterval;
@@ -27,10 +28,11 @@ use App\Utils\Utils;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\PersistentCollection;
 use Doctrine\ORM\Query\Expr\Join;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -47,35 +49,12 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ContestController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var KernelInterface
-     */
-    protected $kernel;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var AssetUpdateService
-     */
-    protected $assetUpdater;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected KernelInterface $kernel;
+    protected EventLogService $eventLogService;
+    protected AssetUpdateService $assetUpdater;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -96,8 +75,9 @@ class ContestController extends BaseController
     /**
      * @Route("", name="jury_contests")
      * @throws NonUniqueResultException
+     * @throws NoResultException
      */
-    public function indexAction(Request $request, KernelInterface $kernel): Response
+    public function indexAction(Request $request): Response
     {
         $em = $this->em;
 
@@ -131,7 +111,7 @@ class ContestController extends BaseController
             }
 
             $now       = (int)floor(Utils::now());
-            $nowstring = strftime('%Y-%m-%d %H:%M:%S ', $now) . date_default_timezone_get();
+            $nowstring = date('Y-m-d H:i:s ', $now) . date_default_timezone_get();
             $this->dj->auditlog('contest', $contest->getCid(), $time . ' now', $nowstring);
 
             // Special case delay/resume start (only sets/unsets starttime_undefined).
@@ -185,28 +165,21 @@ class ContestController extends BaseController
                     ->setStarttimeEnabled(true);
                 $em->flush();
 
-                $this->eventLogService->log(
-                    'contest',
-                    $contest->getCid(),
-                    EventLogService::ACTION_UPDATE,
-                    $contest->getCid()
-                );
                 $this->addFlash('scoreboard_refresh',
                                 'After changing the contest start time, it may be ' .
                                 'necessary to recalculate any cached scoreboards.');
-                return $this->redirectToRoute('jury_contests');
             } else {
                 $method = sprintf('set%stimeString', $time);
                 $contest->{$method}($nowstring);
                 $em->flush();
-                $this->eventLogService->log(
-                    'contest',
-                    $contest->getCid(),
-                    EventLogService::ACTION_UPDATE,
-                    $contest->getCid()
-                );
-                return $this->redirectToRoute('jury_contests');
             }
+            $this->eventLogService->log(
+                'contest',
+                $contest->getCid(),
+                EventLogService::ACTION_UPDATE,
+                $contest->getCid()
+            );
+            return $this->redirectToRoute('jury_contests');
         }
 
         $contests = $em->createQueryBuilder()
@@ -322,7 +295,7 @@ class ContestController extends BaseController
                     ->join('t.category', 'cat')
                     ->leftJoin('cat.contests', 'cc')
                     ->andWhere('c.cid = :cid OR cc.cid = :cid')
-                    ->setParameter(':cid', $contest->getCid())
+                    ->setParameter('cid', $contest->getCid())
                     ->getQuery()
                     ->getSingleScalarResult();
                 $contestdata['num_teams'] = ['value' => $teamCount];
@@ -340,8 +313,13 @@ class ContestController extends BaseController
                 'start',
                 'end',
             ];
+            $startTime = null;
             foreach ($timeFields as $timeField) {
                 $time = $contestdata[$timeField . 'time']['value'];
+                if($timeField === 'start') {
+                    $startTime = $time;
+                }
+                $timeIcon = null;
                 if (!$contest->getStarttimeEnabled() && $timeField != 'activate') {
                     $time      = null;
                 }
@@ -350,11 +328,23 @@ class ContestController extends BaseController
                     $timeTitle = '-';
                 } else {
                     $timeValue = Utils::printtime($time, $timeFormat);
-                    $timeTitle = Utils::printtime($time, '%Y-%m-%d %H:%M:%S (%Z)');
+                    $timeTitle = Utils::printtime($time, 'Y-m-d H:i:s (T)');
+                    if($timeField === 'activate' && $contest->getStarttimeEnabled()) {
+                        if(Utils::difftime($contestdata['starttime']['value'], $time)>Utils::DAY_IN_SECONDS) {
+                            $timeIcon  = 'calendar-minus';
+                        };
+                    } elseif($timeField === 'end' && $contest->getStarttimeEnabled()) {
+                        if(Utils::difftime($time, $startTime)>Utils::DAY_IN_SECONDS) {
+                            $timeIcon  = 'calendar-plus';
+                        };
+                    }
                 }
                 $contestdata[$timeField . 'time']['value']     = $timeValue;
                 $contestdata[$timeField . 'time']['sortvalue'] = $time;
                 $contestdata[$timeField . 'time']['title']     = $timeTitle;
+                if($timeIcon !== null) {
+                    $contestdata[$timeField . 'time']['icon']  = $timeIcon;
+                }
             }
 
             $styles = [];
@@ -378,7 +368,7 @@ class ContestController extends BaseController
             ->select('c')
             ->andWhere('c.activatetime > :now')
             ->andWhere('c.enabled = 1')
-            ->setParameter(':now', Utils::now())
+            ->setParameter('now', Utils::now())
             ->orderBy('c.activatetime')
             ->setMaxResults(1)
             ->getQuery()
@@ -420,7 +410,7 @@ class ContestController extends BaseController
             ->from(RemovedInterval::class, 'i')
             ->select('i')
             ->andWhere('i.contest = :contest')
-            ->setParameter(':contest', $contest)
+            ->setParameter('contest', $contest)
             ->orderBy('i.starttime')
             ->getQuery()
             ->getResult();
@@ -431,7 +421,7 @@ class ContestController extends BaseController
             ->join('cp.problem', 'p')
             ->select('cp', 'partial p.{probid,externalid,name,timelimit,memlimit}')
             ->andWhere('cp.contest = :contest')
-            ->setParameter(':contest', $contest)
+            ->setParameter('contest', $contest)
             ->orderBy('cp.shortname')
             ->getQuery()
             ->getResult();
@@ -481,10 +471,8 @@ class ContestController extends BaseController
     /**
      * @Route("/{contestId<\d+>}/edit", name="jury_contest_edit")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function editAction(Request $request, int $contestId)
+    public function editAction(Request $request, int $contestId): Response
     {
         /** @var Contest $contest */
         $contest = $this->em->getRepository(Contest::class)->find($contestId);
@@ -497,6 +485,11 @@ class ContestController extends BaseController
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
+            $response = $this->checkTimezones($form);
+            if ($response !== null) {
+                return $response;
+            }
+
             // We need to explicitly assign the contest on all problems, because
             // otherwise we can not save new problems on the contest.
             /** @var ContestProblem[] $problems */
@@ -516,7 +509,7 @@ class ContestController extends BaseController
             // dependent event) anyway and adding the code here would
             // overcomplicate this function.
             // Note that getSnapshot() returns the data as retrieved from the
-            // database
+            // database.
             $getDeletedEntities = function(Collection $collection, string $idMethod) {
                 /** @var PersistentCollection $collection */
                 $deletedEntities = [];
@@ -584,10 +577,8 @@ class ContestController extends BaseController
     /**
      * @Route("/{contestId<\d+>}/delete", name="jury_contest_delete")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function deleteAction(Request $request, int $contestId)
+    public function deleteAction(Request $request, int $contestId): Response
     {
         /** @var Contest $contest */
         $contest = $this->em->getRepository(Contest::class)->find($contestId);
@@ -602,10 +593,8 @@ class ContestController extends BaseController
     /**
      * @Route("/{contestId<\d+>}/problems/{probId<\d+>}/delete", name="jury_contest_problem_delete")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
-    public function deleteProblemAction(Request $request, int $contestId, int $probId)
+    public function deleteProblemAction(Request $request, int $contestId, int $probId): Response
     {
         /** @var ContestProblem $contestProblem */
         $contestProblem = $this->em->getRepository(ContestProblem::class)->find([
@@ -627,21 +616,26 @@ class ContestController extends BaseController
      * @Route("/add", name="jury_contest_add")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function addAction(Request $request) : Response
+    public function addAction(Request $request): Response
     {
         $contest = new Contest();
         // Set default activate time
-        $contest->setActivatetimeString(strftime('%Y-%m-%d %H:%M:00 ') . date_default_timezone_get());
+        $contest->setActivatetimeString(date('Y-m-d H:i:00 ') . date_default_timezone_get());
 
         $form = $this->createForm(ContestType::class, $contest);
 
         $form->handleRequest($request);
 
         if ($form->isSubmitted() && $form->isValid()) {
-            $this->em->transactional(function () use ($contest) {
+            $response = $this->checkTimezones($form);
+            if ($response !== null) {
+                return $response;
+            }
+
+            $this->em->wrapInTransaction(function () use ($contest) {
                 // A little 'hack': we need to first persist and save the
                 // contest, before we can persist and save the problem,
-                // because we need a contest ID
+                // because we need a contest ID.
                 /** @var ContestProblem[] $problems */
                 $problems = $contest->getProblems()->toArray();
                 foreach ($contest->getProblems() as $problem) {
@@ -650,7 +644,7 @@ class ContestController extends BaseController
                 $this->em->persist($contest);
                 $this->em->flush();
 
-                // Now we can assign the problems to the contest and persist them
+                // Now we can assign the problems to the contest and persist them.
                 foreach ($problems as $problem) {
                     $problem->setContest($contest);
                     $this->em->persist($problem);
@@ -661,7 +655,7 @@ class ContestController extends BaseController
                 // teams and team categories for this contest. This happens
                 // when someone connects to the event feed (or we have a
                 // dependent event) anyway and adding the code here would
-                // overcomplicate this function
+                // overcomplicate this function.
             });
             return $this->redirect($this->generateUrl(
                 'jury_contest',
@@ -676,9 +670,8 @@ class ContestController extends BaseController
 
     /**
      * @Route("/{contestId<\d+>}/prefetch", name="jury_contest_prefetch")
-     * @return RedirectResponse|Response
      */
-    public function prefetchAction(Request $request, int $contestId)
+    public function prefetchAction(Request $request, int $contestId): Response
     {
         /** @var Contest $contest */
         $contest  = $this->em->getRepository(Contest::class)->find($contestId);
@@ -686,8 +679,8 @@ class ContestController extends BaseController
             throw new BadRequestHttpException("Contest with cid=$contestId not found.");
         }
         $judgehosts = $this->em->getRepository(Judgehost::class)->findBy([
-            'active' => true,
-            'hidden' => false,
+            'enabled' => true,
+            'hidden'  => false,
         ]);
         $cnt = 0;
         foreach ($judgehosts as $judgehost) {
@@ -714,7 +707,7 @@ class ContestController extends BaseController
                 // TODO: dedup here?
                 $compareExec = $this->dj->getImmutableCompareExecutable($contestProblem);
                 $runExec     = $this->dj->getImmutableRunExecutable($contestProblem);
-                $runConfig = json_encode(
+                $runConfig = $this->dj->jsonEncode(
                     [
                         'hash' => $runExec->getHash(),
                         'combined_run_compare' => $problem->getCombinedRunCompare(),
@@ -726,7 +719,7 @@ class ContestController extends BaseController
                     ->setJudgehost($judgehost)
                     ->setPriority(JudgeTask::PRIORITY_DEFAULT)
                     ->setCompareScriptId($compareExec->getImmutableExecId())
-                    ->setCompareConfig(json_encode(['hash' => $compareExec->getHash()]))
+                    ->setCompareConfig($this->dj->jsonEncode(['hash' => $compareExec->getHash()]))
                     ->setRunScriptId($runExec->getImmutableExecId())
                     ->setRunConfig($runConfig);
                 $this->em->persist($judgeTask);
@@ -747,7 +740,7 @@ class ContestController extends BaseController
                     ->setJudgehost($judgehost)
                     ->setPriority(JudgeTask::PRIORITY_DEFAULT)
                     ->setCompileScriptId($compileExec->getImmutableExecId())
-                    ->setCompileConfig(json_encode(['hash' => $compileExec->getHash()]));
+                    ->setCompileConfig($this->dj->jsonEncode(['hash' => $compileExec->getHash()]));
                 $this->em->persist($judgeTask);
                 $cnt++;
             }
@@ -764,32 +757,29 @@ class ContestController extends BaseController
     /**
      * @Route("/{contestId<\d+>}/finalize", name="jury_contest_finalize")
      * @IsGranted("ROLE_ADMIN")
-     * @return RedirectResponse|Response
      */
-    public function finalizeAction(Request $request, int $contestId)
+    public function finalizeAction(Request $request, int $contestId): Response
     {
         /** @var Contest $contest */
         $contest  = $this->em->getRepository(Contest::class)->find($contestId);
         $blockers = [];
         if (Utils::difftime((float)$contest->getEndtime(), Utils::now()) > 0) {
             $blockers[] = sprintf('Contest not ended yet (will end at %s)',
-                                  Utils::printtime($contest->getEndtime(), '%Y-%m-%d %H:%M:%S (%Z)'));
+                                  Utils::printtime($contest->getEndtime(), 'Y-m-d H:i:s (T)'));
         }
 
         /** @var int[] $submissionIds */
-        $submissionIds = array_map(function (array $data) {
-            return $data['submitid'];
-        }, $this->em->createQueryBuilder()
-               ->from(Submission::class, 's')
-               ->join('s.judgings', 'j', Join::WITH, 'j.valid = 1')
-               ->select('s.submitid')
-               ->andWhere('s.contest = :contest')
-               ->andWhere('s.valid = true')
-               ->andWhere('j.result IS NULL')
-               ->setParameter(':contest', $contest)
-               ->orderBy('s.submitid')
-               ->getQuery()
-               ->getResult()
+        $submissionIds = array_map(fn(array $data) => $data['submitid'], $this->em->createQueryBuilder()
+            ->from(Submission::class, 's')
+            ->join('s.judgings', 'j', Join::WITH, 'j.valid = 1')
+            ->select('s.submitid')
+            ->andWhere('s.contest = :contest')
+            ->andWhere('s.valid = true')
+            ->andWhere('j.result IS NULL')
+            ->setParameter('contest', $contest)
+            ->orderBy('s.submitid')
+            ->getQuery()
+            ->getResult()
         );
 
         if (count($submissionIds) > 0) {
@@ -797,16 +787,14 @@ class ContestController extends BaseController
         }
 
         /** @var int[] $clarificationIds */
-        $clarificationIds = array_map(function (array $data) {
-            return $data['clarid'];
-        }, $this->em->createQueryBuilder()
-               ->from(Clarification::class, 'c')
-               ->select('c.clarid')
-               ->andWhere('c.contest = :contest')
-               ->andWhere('c.answered = false')
-               ->setParameter(':contest', $contest)
-               ->getQuery()
-               ->getResult()
+        $clarificationIds = array_map(fn(array $data) => $data['clarid'], $this->em->createQueryBuilder()
+            ->from(Clarification::class, 'c')
+            ->select('c.clarid')
+            ->andWhere('c.contest = :contest')
+            ->andWhere('c.answered = false')
+            ->setParameter('contest', $contest)
+            ->getQuery()
+            ->getResult()
         );
         if (count($clarificationIds) > 0) {
             $blockers[] = 'Unanswered clarifications found: ' . implode(', ', $clarificationIds);
@@ -834,5 +822,89 @@ class ContestController extends BaseController
             'blockers' => $blockers,
             'form' => $form->createView(),
         ]);
+    }
+
+    /**
+     * @Route("/{contestId<\d+>}/request-remaining", name="jury_contest_request_remaining")
+     */
+    public function requestRemainingRunsWholeContestAction(int $contestId): RedirectResponse
+    {
+        /** @var Contest $contest */
+        $contest = $this->em->getRepository(Contest::class)->find($contestId);
+        if (!$contest) {
+            throw new NotFoundHttpException(sprintf('Contest with ID %s not found', $contestId));
+        }
+        $judgings = $this->em->createQueryBuilder()
+                             ->from(Judging::class, 'j')
+                             ->select('j')
+                             ->join('j.submission', 's')
+                             ->join('s.team', 't')
+                             ->join('t.category', 'tc')
+                             ->andWhere('tc.visible = true')
+                             ->andWhere('j.valid = true')
+                             ->andWhere('s.contest = :contestId')
+                             ->setParameter('contestId', $contestId)
+                             ->getQuery()
+                             ->getResult();
+        $this->judgeRemaining($judgings);
+        return $this->redirect($this->generateUrl('jury_contest', ['contestId' => $contestId]));
+    }
+
+    /**
+     * @Route("/{contestId<\d+>}/problems/{probId<\d+>}/request-remaining", name="jury_contest_problem_request_remaining")
+     */
+    public function requestRemainingRunsContestProblemAction(int $contestId, int $probId): RedirectResponse
+    {
+        /** @var ContestProblem $contestProblem */
+        $contestProblem = $this->em->getRepository(ContestProblem::class)->find([
+            'contest' => $contestId,
+            'problem' => $probId
+        ]);
+        if (!$contestProblem) {
+            throw new NotFoundHttpException(
+                sprintf('Contest problem with contest ID %s and problem ID %s not found',
+                        $contestId, $probId)
+            );
+        }
+
+        $judgings = $this->em->createQueryBuilder()
+                             ->from(Judging::class, 'j')
+                             ->select('j')
+                             ->join('j.submission', 's')
+                             ->join('s.team', 't')
+                             ->join('t.category', 'tc')
+                             ->andWhere('s.problem = :problemId')
+                             ->andWhere('tc.visible = true')
+                             ->andWhere('j.valid = true')
+                             ->andWhere('s.contest = :contestId')
+                             ->setParameter('problemId', $probId)
+                             ->setParameter('contestId', $contestId)
+                             ->getQuery()
+                             ->getResult();
+        $this->judgeRemaining($judgings);
+        return $this->redirect($this->generateUrl('jury_contest', ['contestId' => $contestId]));
+    }
+
+    // Return null in case no error has been found.
+    private function checkTimezones(FormInterface $form): ?Response
+    {
+        $formData = $form->getData();
+        $timeZones = [];
+        foreach (['Activate', 'Deactivate', 'Start', 'End', 'Freeze', 'Unfreeze'] as $timeString) {
+            $tmpValue = $formData->{'get' . $timeString . 'timeString'}();
+            if ($tmpValue !== '' && !is_null($tmpValue)) {
+                $fields = explode(' ', $tmpValue);
+                if (count($fields) > 1) {
+                    $timeZones[] = $fields[2];
+                }
+            }
+        }
+        if (count(array_unique($timeZones)) > 1) {
+            $this->addFlash('danger', 'Contest should not have multiple timezones.');
+            return $this->render('jury/contest_add.html.twig', [
+                'form' => $form->createView(),
+            ]);
+        }
+        return null;
     }
 }

@@ -2,8 +2,6 @@
 
 namespace App\Controller\API;
 
-use App\Entity\Contest;
-use App\Entity\Team;
 use App\Entity\TeamAffiliation;
 use App\Service\AssetUpdateService;
 use App\Service\ConfigurationService;
@@ -13,7 +11,6 @@ use App\Service\ImportExportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
 use OpenApi\Annotations as OA;
@@ -24,8 +21,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Validator\ConstraintViolation;
-use Symfony\Component\Validator\ConstraintViolationList;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
@@ -38,10 +33,7 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
  */
 class OrganizationController extends AbstractRestController
 {
-    /**
-     * @var AssetUpdateService
-     */
-    protected $assetUpdater;
+    protected AssetUpdateService $assetUpdater;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -56,7 +48,7 @@ class OrganizationController extends AbstractRestController
     }
 
     /**
-     * Get all the organizations for this contest
+     * Get all the organizations for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -81,13 +73,13 @@ class OrganizationController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : Response
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given organization for this contest
+     * Get the given organization for this contest.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
      * @OA\Response(
@@ -103,13 +95,13 @@ class OrganizationController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
 
     /**
-     * Get the logo for the given organization
+     * Get the logo for the given organization.
      * @Rest\Get("/{id}/logo", name="organization_logo")
      * @OA\Response(
      *     response="200",
@@ -125,7 +117,7 @@ class OrganizationController extends AbstractRestController
         /** @var TeamAffiliation $teamAffiliation */
         $teamAffiliation = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -143,7 +135,7 @@ class OrganizationController extends AbstractRestController
     }
 
     /**
-     * Delete the logo for the given organization
+     * Delete the logo for the given organization.
      * @Rest\Delete("/{id}/logo", name="delete_organization_logo")
      * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting logo succeeded")
@@ -154,7 +146,7 @@ class OrganizationController extends AbstractRestController
         /** @var TeamAffiliation $teamAffiliation */
         $teamAffiliation = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -172,7 +164,7 @@ class OrganizationController extends AbstractRestController
     }
 
     /**
-     * Set the logo for the given organization
+     * Set the logo for the given organization.
      * @Rest\POST("/{id}/logo", name="post_organization_logo")
      * @Rest\PUT("/{id}/logo", name="put_organization_logo")
      * @OA\RequestBody(
@@ -191,7 +183,6 @@ class OrganizationController extends AbstractRestController
      *     )
      * )
      * @IsGranted("ROLE_ADMIN")
-     * @OA\Response(response="400", description="Invalid data provided")
      * @OA\Response(response="204", description="Setting logo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
@@ -200,7 +191,7 @@ class OrganizationController extends AbstractRestController
         /** @var TeamAffiliation $teamAffiliation */
         $teamAffiliation = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -229,7 +220,7 @@ class OrganizationController extends AbstractRestController
     }
 
     /**
-     * Add a new organization
+     * Add a new organization.
      *
      * @Rest\Post()
      * @IsGranted("ROLE_API_WRITER")
@@ -268,7 +259,7 @@ class OrganizationController extends AbstractRestController
 
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
-        // Call getContestId to make sure we have an active contest
+        // Call getContestId to make sure we have an active contest.
         $this->getContestId($request);
         $queryBuilder = $this->em->createQueryBuilder()
             ->from(TeamAffiliation::class, 'ta')
@@ -278,15 +269,12 @@ class OrganizationController extends AbstractRestController
         if ($request->query->has('country')) {
             $queryBuilder
                 ->andWhere('ta.country = :country')
-                ->setParameter(':country', $request->query->get('country'));
+                ->setParameter('country', $request->query->get('country'));
         }
 
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('ta.%s', $this->eventLogService->externalIdFieldForEntity(TeamAffiliation::class) ?? 'affilid');

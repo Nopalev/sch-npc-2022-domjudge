@@ -94,7 +94,7 @@ var doReload = true;
 function reloadPage()
 {
     if (doReload) {
-        location.reload();
+        window.location.reload();
     }
 }
 
@@ -425,6 +425,16 @@ function processAjaxResponse(jqXHR, data) {
     if (jqXHR.getResponseHeader('X-Login-Page')) {
         window.location = jqXHR.getResponseHeader('X-Login-Page');
     } else {
+        var newCurrentContest = parseInt(jqXHR.getResponseHeader('X-Current-Contest'));
+        var dataCurrentContest = $('[data-current-contest]').data('current-contest');
+        var currentContest = parseInt(dataCurrentContest);
+
+        // If the contest ID changed from another tab, reload or whole page
+        if (dataCurrentContest !== undefined && newCurrentContest !== currentContest) {
+            window.location.reload();
+            return;
+        }
+
         var $refreshTarget = $('[data-ajax-refresh-target]');
         var $data = $(data);
         // When using the static scoreboard, we need to find the children of the [data-ajax-refresh-target]
@@ -521,6 +531,12 @@ function updateMenuAlerts()
             updateMenuJudgehosts(json.judgehosts);
             updateMenuInternalErrors(json.internal_errors);
             updateMenuBalloons(json.balloons);
+            if (json.shadow_difference_count !== undefined) {
+                updateMenuShadowDifferences(json.shadow_difference_count);
+            }
+            if (json.external_contest_sources !== undefined) {
+                updateMenuExternalContestSources(json);
+            }
         }
     });
 }
@@ -619,6 +635,45 @@ function updateMenuBalloons(data)
     }
 }
 
+function updateMenuShadowDifferences(data)
+{
+    var num = data;
+    if ( num == 0 ) {
+        $("#num-alerts-shadowdifferences").hide();
+        $("#num-alerts-shadowdifferences-sub").html("");
+        $("#menu_shadow_differences").removeClass("text-danger");
+    } else {
+        $("#num-alerts-shadowdifferences").html(num);
+        $("#num-alerts-shadowdifferences").show();
+        $("#num-alerts-shadowdifferences-sub").html(num + " differences");
+        $("#menu_shadow_differences").addClass("text-danger");
+    }
+}
+
+function updateMenuExternalContestSources(data)
+{
+    var numDown = data.external_contest_sources.length;
+    var numWarnings = parseInt(data.external_source_warning_count);
+    if ( numDown == 0 && numWarnings == 0 ) {
+        $("#num-alerts-externalcontestsources").hide();
+        $("#num-alerts-externalcontestsources-sub").html("");
+        $("#menu_shadow_differences").removeClass("text-danger");
+    } else {
+        $("#num-alerts-externalcontestsources").html(numDown + numWarnings);
+        $("#num-alerts-externalcontestsources").show();
+        var text;
+        if (numDown > 0 && numWarnings > 0) {
+            text = numDown + " down, " + numWarnings + " warnings";
+        } else if (numDown > 0) {
+            text = numDown + " down";
+        }  else {
+            text = numWarnings + " warnings";
+        }
+        $("#num-alerts-externalcontestsources-sub").html(text);
+        $("#menu_external_contest_sources").addClass("text-danger");
+    }
+}
+
 function initializeAjaxModals()
 {
     var $body = $('body');
@@ -663,13 +718,16 @@ function initializeAjaxModals()
 
 function pinScoreheader()
 {
-    var static_in_url = new URL(window.location.toString().toLowerCase()).searchParams.get("static");
-    var static_scoreboard = static_in_url==="true" || static_in_url==='1';
+    var $scoreHeader = $('.scoreheader');
+    if (!$scoreHeader.length) {
+        return;
+    }
+    var static_scoreboard = $scoreHeader.data('static');
     if (!static_scoreboard) {
         $('.scoreheader th').css('top', $('.fixed-top').css('height'));
         if ('ResizeObserver' in window) {
             var resizeObserver = new ResizeObserver(() => {
-                $('.scoreheader th').css('top', $('.fixed-top').css('height'));
+                $scoreHeader.find('th').css('top', $('.fixed-top').css('height'));
             });
             resizeObserver.observe($('.fixed-top')[0]);
         }

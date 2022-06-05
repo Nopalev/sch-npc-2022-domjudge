@@ -14,7 +14,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class ExecutableType extends AbstractType
 {
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('execid', TextType::class, [
             'label' => 'ID',
@@ -30,7 +30,7 @@ class ExecutableType extends AbstractType
         ]);
         $builder->add('save', SubmitType::class);
 
-        // Remove ID field when doing an edit
+        // Remove ID field when doing an edit.
         $builder->addEventListener(FormEvents::PRE_SET_DATA, function (FormEvent $event) {
             /** @var Executable|null $executable */
             $executable = $event->getData();
@@ -42,7 +42,7 @@ class ExecutableType extends AbstractType
         });
     }
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => Executable::class]);
     }

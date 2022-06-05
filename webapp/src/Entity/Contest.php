@@ -23,7 +23,7 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="contest",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Contests that will be run with this install"},
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Contests that will be run with this install"},
  *     indexes={@ORM\Index(name="cid", columns={"cid", "enabled"})},
  *     uniqueConstraints={
  *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths": {190}}),
@@ -49,44 +49,39 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     const STARTTIME_UPDATE_MIN_SECONDS_BEFORE = 30;
 
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="cid", options={"comment"="Contest ID", "unsigned"=true}, nullable=false, length=4)
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
-    protected $cid;
+    protected ?int $cid = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="externalid", length=255, options={"comment"="Contest ID in an external system",
      *                            "collation"="utf8mb4_bin"}, nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      * @Serializer\SerializedName("external_id")
      */
-    protected $externalid;
+    protected ?string $externalid = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="name", length=255, options={"comment"="Descriptive name"}, nullable=false)
      * @Assert\NotBlank()
      */
-    private $name = '';
+    private string $name = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="shortname", length=255, options={"comment"="Short name for this contest"},
      *                            nullable=false)
      * @Serializer\Groups({"Nonstrict"})
      * @Identifier()
      * @Assert\NotBlank()
      */
-    private $shortname = '';
+    private string $shortname = '';
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="activatetime",
      *     options={"comment"="Time contest becomes visible in team/public views",
      *              "unsigned"=true},
@@ -96,7 +91,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     private $activatetime;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime",
      *     options={"comment"="Time contest starts, submissions accepted",
      *              "unsigned"=true},
@@ -106,16 +101,15 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     private $starttime;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="starttime_enabled",
      *     options={"comment"="If disabled, starttime is not used, e.g. to delay contest start","default"=1},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $starttimeEnabled = true;
+    private bool $starttimeEnabled = true;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="freezetime",
      *     options={"comment"="Time scoreboard is frozen","unsigned"=true},
      *     nullable=true)
@@ -124,7 +118,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     private $freezetime;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="endtime",
      *     options={"comment"="Time after which no more submissions are accepted",
      *              "unsigned"=true},
@@ -134,51 +128,48 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     private $endtime;
 
     /**
-     * @var double
+     * @var double|string|null
      * @ORM\Column(type="decimal", precision=32, scale=9, name="unfreezetime",
      *     options={"comment"="Unfreeze a frozen scoreboard at this time",
      *              "unsigned"=true},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    private $unfreezetime;
+    private $unfreezetime = null;
 
     /**
-     * @var double
+     * @var double|string|null
      * @ORM\Column(type="decimal", precision=32, scale=9, name="finalizetime",
      *     options={"comment"="Time when contest was finalized, null if not yet",
      *              "unsigned"=true},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    private $finalizetime;
+    private $finalizetime = null;
 
     /**
-     * @var string|null
-     * @ORM\Column(type="text", name="finalizecomment",
+     * @ORM\Column(type="text", name="finalizecomment", length=65535,
      *     options={"comment"="Comments by the finalizer"},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    private $finalizecomment;
+    private ?string $finalizecomment = null;
 
     /**
-     * @var int|null
      * @ORM\Column(type="smallint", length=3, name="b",
      *     options={"comment"="Number of extra bronze medals","unsigned"="true","default"=0},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $b = 0;
+    private ?int $b = 0;
 
     /**
-     * @var boolean|null
      * @ORM\Column(type="boolean", name="medals_enabled",
      *     options={"default"=0},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $medalsEnabled = false;
+    private ?bool $medalsEnabled = false;
 
     /**
      * @ORM\ManyToMany(targetEntity="App\Entity\TeamCategory", inversedBy="contests_for_medals")
@@ -188,155 +179,140 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      *               )
      * @Serializer\Exclude()
      */
-    private $medal_categories;
+    private Collection $medal_categories;
 
     /**
-     * @var int|null
      * @ORM\Column(type="smallint", length=3, name="gold_medals",
      *     options={"comment"="Number of gold medals","unsigned"="true","default"=4},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $goldMedals = 4;
+    private int $goldMedals = 4;
 
     /**
-     * @var int|null
      * @ORM\Column(type="smallint", length=3, name="silver_medals",
      *     options={"comment"="Number of silver medals","unsigned"="true","default"=4},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $silverMedals = 4;
+    private int $silverMedals = 4;
 
     /**
-     * @var int|null
      * @ORM\Column(type="smallint", length=3, name="bronze_medals",
      *     options={"comment"="Number of bronze medals","unsigned"="true","default"=4},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $bronzeMedals = 4;
+    private int $bronzeMedals = 4;
 
     /**
-     * @var double
+     * @var double|string
      * @ORM\Column(type="decimal", precision=32, scale=9, name="deactivatetime",
      *     options={"comment"="Time contest becomes invisible in team/public views",
      *              "unsigned"=true},
      *     nullable=true)
      * @Serializer\Exclude()
      */
-    private $deactivatetime;
+    private $deactivatetime = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="activatetime_string",
      *     options={"comment"="Authoritative absolute or relative string representation of activatetime"},
      *     nullable=false)
      * @Serializer\Exclude()
      * @TimeString(relativeIsPositive=false)
      */
-    private $activatetimeString = '';
+    private string $activatetimeString = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="starttime_string",
      *     options={"comment"="Authoritative absolute (only!) string representation of starttime"},
      *     nullable=false)
      * @Serializer\Exclude()
      * @TimeString(allowRelative=false)
      */
-    private $starttimeString = '';
+    private string $starttimeString = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="freezetime_string",
      *     options={"comment"="Authoritative absolute or relative string representation of freezetime"},
      *     nullable=true)
      * @Serializer\Exclude()
      * @TimeString()
      */
-    private $freezetimeString = '';
+    private ?string $freezetimeString = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="endtime_string",
      *     options={"comment"="Authoritative absolute or relative string representation of endtime"},
      *     nullable=false)
      * @Serializer\Exclude()
      * @TimeString()
      */
-    private $endtimeString;
+    private string $endtimeString = '';
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="unfreezetime_string",
      *     options={"comment"="Authoritative absolute or relative string representation of unfreezetime"},
      *     nullable=true)
      * @Serializer\Exclude()
      * @TimeString()
      */
-    private $unfreezetimeString;
+    private ?string $unfreezetimeString = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=64, name="deactivatetime_string",
      *     options={"comment"="Authoritative absolute or relative string representation of deactivatetime"},
      *     nullable=true)
      * @Serializer\Exclude()
      * @TimeString()
      */
-    private $deactivatetimeString;
+    private ?string $deactivatetimeString = null;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="enabled",
      *     options={"comment"="Whether this contest can be active","default"=1},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $enabled = true;
+    private bool $enabled = true;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="process_balloons",
      *     options={"comment"="Will balloons be processed for this contest?","default"=1},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $processBalloons = true;
+    private bool $processBalloons = true;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="public",
      *     options={"comment"="Is this contest visible for the public?",
      *              "default"=1},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $public = true;
+    private bool $public = true;
 
     /**
-     * @var UploadedFile|null
      * @Assert\File(mimeTypes={"image/png","image/jpeg","image/svg+xml"}, mimeTypesMessage="Only PNG's, JPG's and SVG's are allowed")
      * @Serializer\Exclude()
      */
-    private $bannerFile;
+    private ?UploadedFile $bannerFile = null;
 
     /**
-     * @var bool
      * @Serializer\Exclude()
      */
-    private $clearBanner = false;
+    private bool $clearBanner = false;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="open_to_all_teams",
      *     options={"comment"="Is this contest open to all teams?",
      *              "default"=1},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $openToAllTeams = true;
+    private bool $openToAllTeams = true;
 
     /**
      * @ORM\ManyToMany(targetEntity="Team", inversedBy="contests")
@@ -346,7 +322,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      *               )
      * @Serializer\Exclude()
      */
-    private $teams;
+    private Collection $teams;
 
     /**
      * @ORM\ManyToMany(targetEntity="App\Entity\TeamCategory", inversedBy="contests")
@@ -356,19 +332,19 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      *               )
      * @Serializer\Exclude()
      */
-    private $team_categories;
+    private Collection $team_categories;
 
     /**
      * @ORM\OneToMany(targetEntity="Clarification", mappedBy="contest")
      * @Serializer\Exclude()
      */
-    private $clarifications;
+    private Collection $clarifications;
 
     /**
      * @ORM\OneToMany(targetEntity="Submission", mappedBy="contest")
      * @Serializer\Exclude()
      */
-    private $submissions;
+    private Collection $submissions;
 
     /**
      * @ORM\OneToMany(targetEntity="ContestProblem", mappedBy="contest", orphanRemoval=true, cascade={"persist"})
@@ -376,13 +352,13 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      * @Serializer\Exclude()
      * @Assert\Valid()
      */
-    private $problems;
+    private Collection $problems;
 
     /**
      * @ORM\OneToMany(targetEntity="InternalError", mappedBy="contest")
      * @Serializer\Exclude()
      */
-    private $internal_errors;
+    private Collection $internal_errors;
 
     /**
      * @var ArrayCollection
@@ -390,18 +366,27 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      * @Serializer\Exclude()
      * @Assert\Valid()
      */
-    private $removedIntervals;
+    private Collection $removedIntervals;
+
+    /**
+     * @var ArrayCollection
+     * @ORM\OneToMany(targetEntity="App\Entity\ExternalContestSource", mappedBy="contest")
+     * @Serializer\Exclude()
+     * @Assert\Valid()
+     */
+    private Collection $externalContestSources;
 
     public function __construct()
     {
-        $this->problems         = new ArrayCollection();
-        $this->teams            = new ArrayCollection();
-        $this->removedIntervals = new ArrayCollection();
-        $this->clarifications   = new ArrayCollection();
-        $this->submissions      = new ArrayCollection();
-        $this->internal_errors  = new ArrayCollection();
-        $this->team_categories  = new ArrayCollection();
-        $this->medal_categories = new ArrayCollection();
+        $this->problems               = new ArrayCollection();
+        $this->teams                  = new ArrayCollection();
+        $this->removedIntervals       = new ArrayCollection();
+        $this->clarifications         = new ArrayCollection();
+        $this->submissions            = new ArrayCollection();
+        $this->internal_errors        = new ArrayCollection();
+        $this->team_categories        = new ArrayCollection();
+        $this->medal_categories       = new ArrayCollection();
+        $this->externalContestSources = new ArrayCollection();
     }
 
     public function getCid(): ?int
@@ -505,7 +490,6 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     }
 
     /**
-     * @throws Exception
      * @Serializer\VirtualProperty()
      * @Serializer\SerializedName("end_time")
      * @Serializer\Type("DateTime")
@@ -538,9 +522,10 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this->finalizecomment;
     }
 
-    public function setFinalizecomment(?string $finalizecomment)
+    public function setFinalizecomment(?string $finalizecomment): Contest
     {
         $this->finalizecomment = $finalizecomment;
+        return $this;
     }
 
     public function getB(): ?int
@@ -688,24 +673,12 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this->processBalloons;
     }
 
-    /**
-     * Set medalsEnabled
-     *
-     * @param boolean $medalsEnabled
-     *
-     * @return Contest
-     */
     public function setMedalsEnabled(bool $medalsEnabled): Contest
     {
         $this->medalsEnabled = $medalsEnabled;
         return $this;
     }
 
-    /**
-     * Get medalsEnabled
-     *
-     * @return boolean
-     */
     public function getMedalsEnabled(): bool
     {
         return $this->medalsEnabled;
@@ -737,70 +710,34 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    /**
-     * Set goldMedals
-     *
-     * @param int|null $goldMedals
-     *
-     * @return Contest
-     */
-    public function setGoldMedals(?int $goldMedals): Contest
+    public function setGoldMedals(int $goldMedals): Contest
     {
         $this->goldMedals = $goldMedals;
         return $this;
     }
 
-    /**
-     * Get goldMedals
-     *
-     * @return int|null
-     */
-    public function getGoldMedals(): ?int
+    public function getGoldMedals(): int
     {
         return $this->goldMedals;
     }
 
-    /**
-     * Set silverMedals
-     *
-     * @param int|null $silverMedals
-     *
-     * @return Contest
-     */
-    public function setSilverMedals(?int $silverMedals): Contest
+    public function setSilverMedals(int $silverMedals): Contest
     {
         $this->silverMedals = $silverMedals;
         return $this;
     }
 
-    /**
-     * Get silverMedals
-     *
-     * @return int|null
-     */
-    public function getSilverMedals(): ?int
+    public function getSilverMedals(): int
     {
         return $this->silverMedals;
     }
 
-    /**
-     * Set bronzeMedals
-     *
-     * @param int|null $bronzeMedals
-     *
-     * @return Contest
-     */
-    public function setBronzeMedals(?int $bronzeMedals): Contest
+    public function setBronzeMedals(int $bronzeMedals): Contest
     {
         $this->bronzeMedals = $bronzeMedals;
         return $this;
     }
 
-    /**
-     * Get bronzeMedals
-     *
-     * @return int|null
-     */
     public function getBronzeMedals(): int
     {
         return $this->bronzeMedals;
@@ -839,7 +776,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeTeam(Team $team)
+    public function removeTeam(Team $team): void
     {
         $this->teams->removeElement($team);
     }
@@ -855,7 +792,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeProblem(ContestProblem $problem)
+    public function removeProblem(ContestProblem $problem): void
     {
         $this->problems->removeElement($problem);
     }
@@ -871,7 +808,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeClarification(Clarification $clarification)
+    public function removeClarification(Clarification $clarification): void
     {
         $this->clarifications->removeElement($clarification);
     }
@@ -887,7 +824,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeSubmission(Submission $submission)
+    public function removeSubmission(Submission $submission): void
     {
         $this->submissions->removeElement($submission);
     }
@@ -903,7 +840,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeInternalError(InternalError $internalError)
+    public function removeInternalError(InternalError $internalError): void
     {
         $this->internal_errors->removeElement($internalError);
     }
@@ -947,11 +884,9 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     }
 
     /**
-     * @param $time_string
      * @return float|int|null
-     * @throws Exception
      */
-    public function getAbsoluteTime($time_string)
+    public function getAbsoluteTime(?string $time_string)
     {
         if ($time_string === null) {
             return null;
@@ -970,7 +905,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
             $seconds      *= $sign;
             $absoluteTime = $this->starttime + $seconds;
 
-            // Take into account the removed intervals
+            // Take into account the removed intervals.
             /** @var RemovedInterval[] $removedIntervals */
             $removedIntervals = $this->getRemovedIntervals()->toArray();
             usort($removedIntervals, function (RemovedInterval $a, RemovedInterval $b) {
@@ -1000,7 +935,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
         return $this;
     }
 
-    public function removeRemovedInterval(RemovedInterval $removedInterval)
+    public function removeRemovedInterval(RemovedInterval $removedInterval): void
     {
         $this->removedIntervals->removeElement($removedInterval);
     }
@@ -1056,7 +991,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
             } elseif (empty($timeValue)) {
                 $resultItem['icon'] = null;
             } elseif (Utils::difftime((float)$timeValue, $now) <= 0) {
-                // this event has passed, mark as such
+                // This event has passed, mark as such.
                 $resultItem['icon'] = 'check';
                 $prevchecked        = true;
             } elseif ($prevchecked) {
@@ -1065,7 +1000,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
             }
 
             $resultItem['label'] = sprintf('%s time', ucfirst($time));
-            $resultItem['time']  = Utils::printtime($timeValue, '%Y-%m-%d %H:%M (%Z)');
+            $resultItem['time']  = Utils::printtime($timeValue, 'Y-m-d H:i:s (T)');
             if ($time === 'start' && !$this->getStarttimeEnabled()) {
                 $resultItem['class'] = 'ignore';
             }
@@ -1154,9 +1089,9 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
      * @ORM\PrePersist()
      * @ORM\PreUpdate()
      */
-    public function updateTimes()
+    public function updateTimes(): void
     {
-        // Update the start times, as this will update all other fields
+        // Update the start times, as this will update all other fields.
         $this->setStarttime((float)strtotime($this->getStarttimeString()));
         $this->setStarttimeString($this->getStarttimeString());
     }
@@ -1164,7 +1099,7 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     /**
      * @Assert\Callback()
      */
-    public function validate(ExecutionContextInterface $context)
+    public function validate(ExecutionContextInterface $context): void
     {
         $this->updateTimes();
         if (Utils::difftime((float)$this->getEndtime(), (float)$this->getStarttime(true)) <= 0) {
@@ -1237,12 +1172,11 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
 
         /** @var ContestProblem $problem */
         foreach ($this->problems as $idx => $problem) {
-            // Check if the problem ID is unique
-            $otherProblemIds = $this->problems->filter(function (ContestProblem $otherProblem) use ($problem) {
-                return $otherProblem !== $problem;
-            })->map(function (ContestProblem $problem) {
-                return $problem->getProblem()->getProbid();
-            })->toArray();
+            // Check if the problem ID is unique.
+            $otherProblemIds = $this->problems
+                ->filter(fn(ContestProblem $otherProblem) => $otherProblem !== $problem)
+                ->map(fn(ContestProblem $problem) => $problem->getProblem()->getProbid())
+                ->toArray();
             $problemId       = $problem->getProblem()->getProbid();
             if (in_array($problemId, $otherProblemIds)) {
                 $context
@@ -1251,12 +1185,11 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
                     ->addViolation();
             }
 
-            // Check if the problem shortname is unique
-            $otherShortNames = $this->problems->filter(function (ContestProblem $otherProblem) use ($problem) {
-                return $otherProblem !== $problem;
-            })->map(function (ContestProblem $problem) {
-                return strtolower($problem->getShortname());
-            })->toArray();
+            // Check if the problem shortname is unique.
+            $otherShortNames = $this->problems
+                ->filter(fn(ContestProblem $otherProblem) => $otherProblem !== $problem)
+                ->map(fn(ContestProblem $problem) => strtolower($problem->getShortname()))
+                ->toArray();
             $shortname = strtolower($problem->getShortname());
             if (in_array($shortname, $otherShortNames)) {
                 $context
@@ -1319,6 +1252,32 @@ class Contest extends BaseApiEntity implements AssetEntityInterface
     {
         if ($this->team_categories->contains($teamCategory)) {
             $this->team_categories->removeElement($teamCategory);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return Collection|ExternalContestSource[]
+     */
+    public function getExternalContestSources(): Collection
+    {
+        return $this->externalContestSources;
+    }
+
+    public function addExternalContestSource(ExternalContestSource $externalContestSource): self
+    {
+        if (!$this->externalContestSources->contains($externalContestSource)) {
+            $this->externalContestSources[] = $externalContestSource;
+        }
+
+        return $this;
+    }
+
+    public function removeExternalContestSource(ExternalContestSource $externalContestSource): self
+    {
+        if ($this->externalContestSources->contains($externalContestSource)) {
+            $this->externalContestSources->removeElement($externalContestSource);
         }
 
         return $this;

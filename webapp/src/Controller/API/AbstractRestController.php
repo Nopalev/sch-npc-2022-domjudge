@@ -3,7 +3,6 @@
 namespace App\Controller\API;
 
 use App\Entity\Contest;
-use App\Entity\Submission;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
@@ -29,29 +28,11 @@ use Symfony\Component\Validator\ConstraintViolationListInterface;
  */
 abstract class AbstractRestController extends AbstractFOSRestController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
 
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * AbstractRestController constructor.
-     */
     public function __construct(
         EntityManagerInterface $entityManager,
         DOMJudgeService $dj,
@@ -65,7 +46,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Get all objects for this endpoint
+     * Get all objects for this endpoint.
      * @throws NonUniqueResultException
      */
     protected function performListAction(Request $request): Response
@@ -74,16 +55,17 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Get a single object for this endpoint
+     * Get a single object for this endpoint.
      * @throws NonUniqueResultException
      */
     protected function performSingleAction(Request $request, string $id): Response
     {
-        // Make sure we clear the entity manager class, for when this method is called multiple times by internal requests
+        // Make sure we clear the entity manager class, for when this method is called multiple times
+        // by internal requests.
         $this->em->clear();
 
         // Special case for submissions and clarifications: they can have an external ID even if when running in
-        // full local mode, because one can use the API to upload one with an external ID
+        // full local mode, because one can use the API to upload one with an external ID.
         $externalIdAlwaysAllowed = [
             's.submitid',
             'clar.clarid',
@@ -93,11 +75,11 @@ abstract class AbstractRestController extends AbstractFOSRestController
             $table        = explode('.', $idField)[0];
             $queryBuilder = $this->getQueryBuilder($request)
                 ->andWhere(sprintf('(%s.externalid IS NULL AND %s = :id) OR %s.externalid = :id', $table, $idField, $table))
-                ->setParameter(':id', $id);
+                ->setParameter('id', $id);
         } else {
             $queryBuilder = $this->getQueryBuilder($request)
                 ->andWhere(sprintf('%s = :id', $idField))
-                ->setParameter(':id', $id);
+                ->setParameter('id', $id);
         }
 
         $object = $queryBuilder
@@ -116,7 +98,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Render the given data using the correct groups
+     * Render the given data using the correct groups.
      *
      * @param mixed    $data
      * @param string[] $extraheaders
@@ -129,7 +111,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
     ): Response {
         $view = $this->view($data);
 
-        // Set the DOMjudge service on the context, so we can use it for permissions
+        // Set the DOMjudge service on the context, so we can use it for permissions.
         $view->getContext()->setAttribute('domjudge_service', $this->dj);
         $view->getContext()->setAttribute('config_service', $this->config);
 
@@ -152,7 +134,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Render the given create data using the correct groups
+     * Render the given create data using the correct groups.
      *
      * @param mixed      $data
      * @param string|int $id
@@ -177,7 +159,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Get the query builder used for getting contests
+     * Get the query builder used for getting contests.
      * @param bool $onlyActive return only contests that are active
      */
     protected function getContestQueryBuilder(bool $onlyActive = false): QueryBuilder
@@ -194,7 +176,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
             $qb
                 ->andWhere('c.activatetime <= :now')
                 ->andWhere('c.deactivatetime IS NULL OR c.deactivatetime > :now')
-                ->setParameter(':now', $now);
+                ->setParameter('now', $now);
         }
 
         // Filter on contests this user has access to
@@ -204,7 +186,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
                     ->leftJoin('c.team_categories', 'tc')
                     ->leftJoin('tc.teams', 'tct')
                     ->andWhere('ct.teamid = :teamid OR tct.teamid = :teamid OR c.openToAllTeams = 1')
-                    ->setParameter(':teamid', $this->dj->getUser()->getTeam());
+                    ->setParameter('teamid', $this->dj->getUser()->getTeam());
             } else {
                 $qb->andWhere('c.public = 1');
             }
@@ -225,7 +207,7 @@ abstract class AbstractRestController extends AbstractFOSRestController
         $qb = $this->getContestQueryBuilder($request->query->getBoolean('onlyActive', false));
         $qb
             ->andWhere(sprintf('c.%s = :cid', $this->getContestIdField()))
-            ->setParameter(':cid', $request->attributes->get('cid'));
+            ->setParameter('cid', $request->attributes->get('cid'));
 
         /** @var Contest $contest */
         $contest = $qb->getQuery()->getOneOrNullResult();
@@ -247,36 +229,33 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Get the query builder to use for request for this REST endpoint
+     * Get the query builder to use for request for this REST endpoint.
      * @throws NonUniqueResultException
      */
     abstract protected function getQueryBuilder(Request $request): QueryBuilder;
 
     /**
-     * Return the field used as ID in requests
+     * Return the field used as ID in requests.
      */
     abstract protected function getIdField(): string;
 
     /**
-     * @return array|int|mixed|string
      * @throws NonUniqueResultException
      */
-    protected function listActionHelper(Request $request)
+    protected function listActionHelper(Request $request): array
     {
-        // Make sure we clear the entity manager class, for when this method is called multiple times by internal requests.
+        // Make sure we clear the entity manager class, for when this method is called multiple times
+        // by internal requests.
         $this->em->clear();
         $queryBuilder = $this->getQueryBuilder($request);
 
         if ($request->query->has('ids')) {
-            $ids = $request->query->get('ids', []);
-            if (!is_array($ids)) {
-                throw new BadRequestHttpException('\'ids\' should be an array of ID\'s to fetch');
-            }
+            $ids = $request->query->all('ids');
 
             $ids = array_unique($ids);
 
             // Special case for submissions and clarifications: they can have an external ID even if when running in
-            // full local mode, because one can use the API to upload one with an external ID
+            // full local mode, because one can use the API to upload one with an external ID.
             $externalIdAlwaysAllowed = [
                 's.submitid',
                 'clar.clarid',
@@ -287,13 +266,13 @@ abstract class AbstractRestController extends AbstractFOSRestController
                 $or = $queryBuilder->expr()->orX();
                 foreach ($ids as $index => $id) {
                     $or->add(sprintf('(%s.externalid IS NULL AND %s = :id%s) OR %s.externalid = :id%s', $table, $idField, $index, $table, $index));
-                    $queryBuilder->setParameter(sprintf(':id%s', $index), $id);
+                    $queryBuilder->setParameter(sprintf('id%s', $index), $id);
                 }
                 $queryBuilder->andWhere($or);
             } else {
                 $queryBuilder
                     ->andWhere(sprintf('%s IN (:ids)', $this->getIdField()))
-                    ->setParameter(':ids', $ids);
+                    ->setParameter('ids', $ids);
             }
         }
 
@@ -312,25 +291,27 @@ abstract class AbstractRestController extends AbstractFOSRestController
     }
 
     /**
-     * Send a binary file response, sending a 304 if it did not modify since last requested
+     * Send a binary file response, sending a 304 if it did not modify since last requested.
      */
     public static function sendBinaryFileResponse(Request $request, string $fileName): BinaryFileResponse
     {
         // Note: we set auto-etag to true to automatically send the ETag based on the file contents.
         // ETags can be used to determine whether the file changed and if it didn't change, the response will
-        // be a 304 Not Modified
+        // be a 304 Not Modified.
         $response = new BinaryFileResponse($fileName, 200, [], true, null, true);
         $contentType = mime_content_type($fileName);
-        // Some SVG's do not have an XML header and mime_content_type reports those incorrectly.
-        // image/svg+xml is the official mimetype for all SVG's
+        // Some SVGs do not have an XML header and mime_content_type reports those incorrectly.
+        // image/svg+xml is the official mimetype for all SVGs.
         if ($contentType === 'image/svg') {
             $contentType = 'image/svg+xml';
         }
         $response->headers->set('Content-Type', $contentType);
 
-        // Check if we need to send a 304 Not Modified and if so, send it
-        // This is done both on the ETag / If-None-Match as well as the
-        // Last-Modified / If-Modified-Since header pairs
+        // Check if we need to send a 304 Not Modified and if so, send it.
+        // This is done both on the
+        // - ETag / If-None-Match and
+        // - Last-Modified / If-Modified-Since
+        // header pairs.
         if ($response->isNotModified($request)) {
             $response->send();
         }
@@ -338,8 +319,10 @@ abstract class AbstractRestController extends AbstractFOSRestController
         return $response;
     }
 
-    public function responseForErrors(ConstraintViolationListInterface $violations, bool $singleProperty = false): ?JsonResponse
-    {
+    public function responseForErrors(
+        ConstraintViolationListInterface $violations,
+        bool $singleProperty = false
+    ): ?JsonResponse {
         if ($violations->count()) {
             $errors = [];
             /** @var ConstraintViolationInterface $violation */

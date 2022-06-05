@@ -12,20 +12,9 @@ use Symfony\Component\Security\Core\Event\AuthenticationSuccessEvent;
 
 class UserStateUpdater implements EventSubscriberInterface
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var RequestStack
-     */
-    protected $requestStack;
+    protected DOMJudgeService $dj;
+    protected EntityManagerInterface $em;
+    protected RequestStack $requestStack;
 
     public function __construct(DOMJudgeService $dj, EntityManagerInterface $em, RequestStack $requestStack)
     {
@@ -34,15 +23,12 @@ class UserStateUpdater implements EventSubscriberInterface
         $this->requestStack = $requestStack;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [AuthenticationSuccessEvent::class => 'updateUserState'];
     }
 
-    public function updateUserState(AuthenticationSuccessEvent $event)
+    public function updateUserState(AuthenticationSuccessEvent $event): void
     {
         if ($event->getAuthenticationToken() && ($user = $event->getAuthenticationToken()->getUser()) && $user instanceof User) {
             $user->setLastLogin(Utils::now());
@@ -55,9 +41,9 @@ class UserStateUpdater implements EventSubscriberInterface
             $this->em->flush();
 
             // Only log IP address on the main firewall.
-            // Otherwise we also log every API call and we do not want that.
-            if (method_exists($event->getAuthenticationToken(), 'getProviderKey') && $event->getAuthenticationToken()->getProviderKey() === 'main') {
-                $ip = $this->requestStack->getMasterRequest()->getClientIp();
+            // Otherwise, we would log every API call and we do not want that.
+            if (method_exists($event->getAuthenticationToken(), 'getFirewallName') && $event->getAuthenticationToken()->getFirewallName() === 'main') {
+                $ip = $this->requestStack->getMainRequest()->getClientIp();
                 $this->dj->auditlog('user', $user->getUserid(), 'logged on on ' . $ip, null, $user->getUserName());
             }
         }

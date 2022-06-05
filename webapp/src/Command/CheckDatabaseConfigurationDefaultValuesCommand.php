@@ -15,29 +15,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 class CheckDatabaseConfigurationDefaultValuesCommand extends Command
 {
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
+    protected ConfigurationService $config;
 
-    /**
-     * CheckDatabaseConfigurationDefaultValuesCommand constructor.
-     *
-     * @param ConfigurationService $config
-     * @param string|null          $name
-     */
-    public function __construct(
-        ConfigurationService $config,
-        string $name = null
-    ) {
+    public function __construct(ConfigurationService $config, string $name = null) {
         parent::__construct($name);
         $this->config = $config;
     }
 
-    /**
-     * @inheritDoc
-     */
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('domjudge:db-config:check')
@@ -46,11 +31,7 @@ class CheckDatabaseConfigurationDefaultValuesCommand extends Command
             );
     }
 
-    /**
-     * @inheritDoc
-     * @throws \Exception
-     */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $style    = new SymfonyStyle($input, $output);
         $messages = [];
@@ -99,5 +80,7 @@ class CheckDatabaseConfigurationDefaultValuesCommand extends Command
             $style->error('Some default values have the wrong type:');
             $style->listing($messages);
         }
+
+        return static::SUCCESS;
     }
 }

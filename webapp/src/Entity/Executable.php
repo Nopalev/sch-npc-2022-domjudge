@@ -15,7 +15,7 @@ use ZipArchive;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="executable",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4",
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4",
  *              "comment"="Compile, compare, and run script executable bundles"}
  *     )
  */
@@ -29,45 +29,43 @@ class Executable
      * @Assert\NotBlank()
      * @Identifier()
      */
-    private $execid;
+    private string $execid;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="description", length=255,
      *     options={"comment"="Description of this executable"},
      *     nullable=true)
      * @Assert\NotBlank()
      */
-    private $description;
+    private ?string $description = null;
 
     /**
-     * @var string
      * @ORM\Column(type="string", name="type", length=32,
      *     options={"comment"="Type of executable"}, nullable=false)
-     * @Assert\Choice({"compare", "compile", "run"})
+     * @Assert\Choice({"compare", "compile", "debug", "run"})
      */
-    private $type;
+    private string $type;
 
     /**
      * @ORM\OneToOne(targetEntity="ImmutableExecutable")
      * @ORM\JoinColumn(name="immutable_execid", referencedColumnName="immutable_execid")
      */
-    private $immutableExecutable;
+    private ImmutableExecutable $immutableExecutable;
 
     /**
      * @ORM\OneToMany(targetEntity="Language", mappedBy="compile_executable")
      */
-    private $languages;
+    private Collection $languages;
 
     /**
      * @ORM\OneToMany(targetEntity="Problem", mappedBy="compare_executable")
      */
-    private $problems_compare;
+    private Collection $problems_compare;
 
     /**
      * @ORM\OneToMany(targetEntity="Problem", mappedBy="run_executable")
      */
-    private $problems_run;
+    private Collection $problems_run;
 
     public function __construct()
     {
@@ -120,7 +118,7 @@ class Executable
         return $this;
     }
 
-    public function removeLanguage(Language $language)
+    public function removeLanguage(Language $language): void
     {
         $this->languages->removeElement($language);
     }
@@ -136,7 +134,7 @@ class Executable
         return $this;
     }
 
-    public function removeProblemsCompare(Problem $problemsCompare)
+    public function removeProblemsCompare(Problem $problemsCompare): void
     {
         $this->problems_compare->removeElement($problemsCompare);
     }
@@ -152,7 +150,7 @@ class Executable
         return $this;
     }
 
-    public function removeProblemsRun(Problem $problemsRun)
+    public function removeProblemsRun(Problem $problemsRun): void
     {
         $this->problems_run->removeElement($problemsRun);
     }
@@ -179,13 +177,11 @@ class Executable
         if (!($tempzipFile = tempnam($tempdir, "/executable-"))) {
             throw new ServiceUnavailableHttpException(null, 'Failed to create temporary file');
         }
-        $zipArchive->open($tempzipFile);
+        $zipArchive->open($tempzipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
         /** @var ExecutableFile[] $files */
         $files = array_values($this->getImmutableExecutable()->getFiles()->toArray());
-        usort($files, function ($a, $b) {
-            return $a->getRank() <=> $b->getRank();
-        });
+        usort($files, fn($a, $b) => $a->getRank() <=> $b->getRank());
         foreach ($files as $file) {
             $zipArchive->addFromString($file->getFilename(), $file->getFileContent());
             if ($file->isExecutable()) {

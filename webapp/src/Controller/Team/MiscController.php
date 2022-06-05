@@ -14,7 +14,6 @@ use App\Service\SubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -38,30 +37,11 @@ use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
  */
 class MiscController extends BaseController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var SubmissionService
-     */
-    protected $submissionService;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EntityManagerInterface $em;
+    protected ScoreboardService $scoreboardService;
+    protected SubmissionService $submissionService;
 
     /**
      * @var FormFactoryInterface
@@ -98,9 +78,8 @@ class MiscController extends BaseController
      * @Route("", name="team_index")
      * @throws NoResultException
      * @throws NonUniqueResultException
-     * @throws Exception
      */
-    public function homeAction(Request $request) : Response
+    public function homeAction(Request $request): Response
     {
         $user    = $this->dj->getUser();
         $team    = $user->getTeam();
@@ -130,7 +109,7 @@ class MiscController extends BaseController
             $data['limitToTeams'] = [$team];
             $data['verificationRequired'] = $this->config->get('verification_required');
             // We need to clear the entity manager, because loading the team scoreboard seems to break getting submission
-            // contestproblems for the contest we get the scoreboard for
+            // contestproblems for the contest we get the scoreboard for.
             $this->em->clear();
             $data['submissions'] = $this->submissionService->getSubmissionList(
                 [$contest->getCid() => $contest],
@@ -148,8 +127,8 @@ class MiscController extends BaseController
                 ->andWhere('c.contest = :contest')
                 ->andWhere('c.sender IS NULL')
                 ->andWhere('c.recipient = :team OR c.recipient IS NULL')
-                ->setParameter(':contest', $contest)
-                ->setParameter(':team', $team)
+                ->setParameter('contest', $contest)
+                ->setParameter('team', $team)
                 ->addOrderBy('c.submittime', 'DESC')
                 ->addOrderBy('c.clarid', 'DESC')
                 ->getQuery()
@@ -164,8 +143,8 @@ class MiscController extends BaseController
                 ->select('c', 'p')
                 ->andWhere('c.contest = :contest')
                 ->andWhere('c.sender = :team')
-                ->setParameter(':contest', $contest)
-                ->setParameter(':team', $team)
+                ->setParameter('contest', $contest)
+                ->setParameter('team', $team)
                 ->addOrderBy('c.submittime', 'DESC')
                 ->addOrderBy('c.clarid', 'DESC')
                 ->getQuery()
@@ -188,7 +167,7 @@ class MiscController extends BaseController
     /**
      * @Route("/change-contest/{contestId<-?\d+>}", name="team_change_contest")
      */
-    public function changeContestAction(Request $request, RouterInterface $router, int $contestId) : Response
+    public function changeContestAction(Request $request, RouterInterface $router, int $contestId): Response
     {
         if ($this->isLocalReferer($router, $request)) {
             $response = new RedirectResponse($request->headers->get('referer'));
@@ -201,9 +180,8 @@ class MiscController extends BaseController
 
     /**
      * @Route("/print", name="team_print")
-     * @throws Exception
      */
-    public function printAction(Request $request) : Response
+    public function printAction(Request $request): Response
     {
         if (!$this->config->get('print_command')) {
             throw new AccessDeniedHttpException("Printing disabled in config");

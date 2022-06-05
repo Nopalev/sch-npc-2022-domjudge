@@ -9,48 +9,42 @@ use App\Entity\User;
 use App\Form\Type\UserRegistrationType;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
-use Exception;
+use Doctrine\ORM\EntityManagerInterface;
+use Ramsey\Uuid\Uuid;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Annotation\Route;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
-use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
 use Symfony\Component\Security\Http\Authentication\AuthenticationUtils;
 use Its\Sso\OpenIDConnectClient;
 
 class SecurityController extends AbstractController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    private $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
+    private DOMJudgeService $dj;
+    private ConfigurationService $config;
+    private EntityManagerInterface $em;
 
     public function __construct(
         DOMJudgeService $dj,
-        ConfigurationService $config
+        ConfigurationService $config,
+        EntityManagerInterface $em
     ) {
         $this->dj = $dj;
         $this->config = $config;
+        $this->em = $em;
     }
 
     /**
      * @Route("/login", name="login")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
     public function loginAction(
         Request $request,
         AuthorizationCheckerInterface $authorizationChecker,
         AuthenticationUtils $authUtils
-    )
+    ): Response
     {
         $allowIPAuth = false;
         $authmethods = $this->config->get('auth_methods');
@@ -64,13 +58,13 @@ class SecurityController extends AbstractController
             return $this->redirect($this->generateUrl('root'));
         }
 
-        // get the login error if there is one
+        // Get the login error if there is one.
         $error = $authUtils->getLastAuthenticationError();
 
-        // last username entered by the user
+        // Last username entered by the user.
         $lastUsername = $authUtils->getLastUsername();
 
-        $em = $this->getDoctrine()->getManager();
+        $em = $this->em;
 
         $clientIP             = $this->dj->getClientIp();
         $auth_ipaddress_users = [];
@@ -78,7 +72,7 @@ class SecurityController extends AbstractController
             $auth_ipaddress_users = $em->getRepository(User::class)->findBy(['ipAddress' => $clientIP, 'enabled' => 1]);
         }
 
-        // Add a header so we can detect that this is the login page
+        // Add a header so we can detect that this is the login page.
         $response = new Response();
         $response->headers->set('X-Login-Page', $this->generateUrl('login'));
         if (!empty($error)) {
@@ -99,33 +93,32 @@ class SecurityController extends AbstractController
 
     /**
      * @Route("/register", name="register")
-     * @return RedirectResponse|Response
-     * @throws Exception
      */
     public function registerAction(
         Request $request,
         AuthorizationCheckerInterface $authorizationChecker,
-        UserPasswordEncoderInterface $passwordEncoder
-    )
+        UserPasswordHasherInterface $passwordHasher
+    ): Response
     {
         // Redirect if already logged in
         if ($authorizationChecker->isGranted('IS_AUTHENTICATED_FULLY')) {
             return $this->redirect($this->generateUrl('root'));
         }
 
-        $em                              = $this->getDoctrine()->getManager();
+        $em                              = $this->em;
         $selfRegistrationCategoriesCount = $em->getRepository(TeamCategory::class)->count(['allow_self_registration' => 1]);
 
         if ($selfRegistrationCategoriesCount === 0) {
-            throw new HttpException(400, "Registration not enabled");
+            throw new HttpException(403, "Registration not enabled");
         }
 
         $user              = new User();
+        $user->setExternalid(Uuid::uuid4()->toString());
         $registration_form = $this->createForm(UserRegistrationType::class, $user);
         $registration_form->handleRequest($request);
         if ($registration_form->isSubmitted() && $registration_form->isValid()) {
             $plainPass = $registration_form->get('plainPassword')->getData();
-            $password  = $passwordEncoder->encodePassword($user, $plainPass);
+            $password  = $passwordHasher->hashPassword($user, $plainPass);
             $user->setPassword($password);
             if ($user->getName() === null) {
                 $user->setName($user->getUsername());
@@ -140,22 +133,24 @@ class SecurityController extends AbstractController
                 $teamCategory = $registration_form->get('teamCategory')->getData();
             }
 
-            // Create a team to go with the user, then set some team attributes
+            // Create a team to go with the user, then set some team attributes.
             $team = new Team();
             $user->setTeam($team);
             $team
+                ->setExternalid(Uuid::uuid4()->toString())
                 ->addUser($user)
                 ->setName($teamName)
                 ->setCategory($teamCategory)
-                ->setComments('Registered by ' . $this->dj->getClientIp() . ' on ' . date('r'));
+                ->setInternalComments('Registered by ' . $this->dj->getClientIp() . ' on ' . date('r'));
 
             if ($this->config->get('show_affiliations')) {
                 switch ($registration_form->get('affiliation')->getData()) {
                     case 'new':
                         $affiliation = new TeamAffiliation();
                         $affiliation
+                            ->setExternalid(Uuid::uuid4()->toString())
                             ->setName($registration_form->get('affiliationName')->getData())
-                            ->setShortname($registration_form->get('affiliationName')->getData());
+                            ->setShortname($registration_form->get('affiliationShortName')->getData());
                         if ($registration_form->has('affiliationCountry')) {
                             $affiliation->setCountry($registration_form->get('affiliationCountry')->getData());
                         }

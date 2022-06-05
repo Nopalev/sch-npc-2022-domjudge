@@ -12,7 +12,7 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Utils\Utils;
-use Doctrine\DBAL\DBALException;
+use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
@@ -32,32 +32,13 @@ use Symfony\Component\Routing\RouterInterface;
  */
 class JudgehostController extends BaseController
 {
-    // Note: when adding or modifying routes, make sure they do not clash with the /judgehosts/{hostname} route
+    // Note: when adding or modifying routes, make sure they do not clash with the /judgehosts/{hostname} route.
 
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLog;
-
-    /**
-     * @var KernelInterface
-     */
-    protected $kernel;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLog;
+    protected KernelInterface $kernel;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -89,13 +70,12 @@ class JudgehostController extends BaseController
         $table_fields = [
             'judgehostid' => ['title' => 'ID'],
             'hostname' => ['title' => 'hostname'],
-            'active' => ['title' => 'active'],
+            'enabled' => ['title' => 'enabled'],
             'status' => ['title' => 'status'],
             'last_judgingid' => ['title' => 'last judging'],
         ];
 
-        $now           = Utils::now();
-        $contest       = $this->dj->getCurrentContest();
+        $now = Utils::now();
 
         $propertyAccessor = PropertyAccess::createPropertyAccessor();
         $time_warn = $this->config->get('judgehost_warning');
@@ -105,7 +85,7 @@ class JudgehostController extends BaseController
         foreach ($judgehosts as $judgehost) {
             $judgehostdata    = [];
             $judgehostactions = [];
-            // Get whatever fields we can from the problem object itself
+            // Get whatever fields we can from the problem object itself.
             foreach ($table_fields as $k => $v) {
                 if ($propertyAccessor->isReadable($judgehost, $k)) {
                     $judgehostdata[$k] = ['value' => $propertyAccessor->getValue($judgehost, $k)];
@@ -142,8 +122,8 @@ class JudgehostController extends BaseController
                 ->select('jt.jobid')
                 ->andWhere('jt.judgehost = :judgehost')
                 ->andWhere('jt.type = :type')
-                ->setParameter(':judgehost', $judgehost)
-                ->setParameter(':type', JudgeTaskType::JUDGING_RUN)
+                ->setParameter('judgehost', $judgehost)
+                ->setParameter('type', JudgeTaskType::JUDGING_RUN)
                 ->orderBy('jt.starttime', 'DESC')
                 ->setMaxResults(1)
                 ->getQuery()
@@ -157,25 +137,25 @@ class JudgehostController extends BaseController
                     'value' => $status,
                     'title' => $statustitle,
                 ],
-                'active' => [
-                    'value' => $judgehost->getActive() ? 'yes' : 'no',
+                'enabled' => [
+                    'value' => $judgehost->getEnabled() ? 'yes' : 'no',
                 ],
             ]);
 
             // Create action links
             if ($this->isGranted('ROLE_ADMIN')) {
-                if ($judgehost->getActive()) {
-                    $activeicon = 'pause';
-                    $activecmd  = 'deactivate';
-                    $route      = 'jury_judgehost_deactivate';
+                if ($judgehost->getEnabled()) {
+                    $enableicon = 'pause';
+                    $enablecmd  = 'disable';
+                    $route      = 'jury_judgehost_disable';
                 } else {
-                    $activeicon = 'play';
-                    $activecmd  = 'activate';
-                    $route      = 'jury_judgehost_activate';
+                    $enableicon = 'play';
+                    $enablecmd  = 'enable';
+                    $route      = 'jury_judgehost_enable';
                 }
                 $judgehostactions[] = [
-                    'icon' => $activeicon,
-                    'title' => sprintf('%s judgehost', $activecmd),
+                    'icon' => $enableicon,
+                    'title' => sprintf('%s judgehost', $enablecmd),
                     'link' => $this->generateUrl($route, ['judgehostid' => $judgehost->getJudgehostid()]),
                 ];
 
@@ -189,12 +169,12 @@ class JudgehostController extends BaseController
                 ];
             }
 
-            // Save this to our list of rows
+            // Save this to our list of rows.
             $judgehosts_table[] = [
                 'data' => $judgehostdata,
                 'actions' => $judgehostactions,
                 'link' => $this->generateUrl('jury_judgehost', ['judgehostid' => $judgehost->getJudgehostid()]),
-                'cssclass' => $judgehost->getActive() ? '' : 'disabled',
+                'cssclass' => $judgehost->getEnabled() ? '' : 'disabled',
             ];
         }
 
@@ -227,7 +207,7 @@ class JudgehostController extends BaseController
             ->from(Judgehost::class, 'j')
             ->select('j')
             ->andWhere('j.judgehostid = :judgehostid')
-            ->setParameter(':judgehostid', $judgehostid)
+            ->setParameter('judgehostid', $judgehostid)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -256,8 +236,8 @@ class JudgehostController extends BaseController
                 ->leftJoin('j.rejudging', 'r')
                 ->andWhere('j.contest IN (:contests)')
                 ->andWhere('jt.judgehost = :judgehost')
-                ->setParameter(':contests', $contests)
-                ->setParameter(':judgehost', $judgehost)
+                ->setParameter('contests', $contests)
+                ->setParameter('judgehost', $judgehost)
                 ->orderBy('j.starttime', 'DESC')
                 ->addOrderBy('j.judgingid', 'DESC')
                 ->getQuery()
@@ -295,7 +275,7 @@ class JudgehostController extends BaseController
             ->from(Judgehost::class, 'j')
             ->select('j')
             ->andWhere('j.judgehostid = :judgehostid')
-            ->setParameter(':judgehostid', $judgehostid)
+            ->setParameter('judgehostid', $judgehostid)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -304,50 +284,52 @@ class JudgehostController extends BaseController
     }
 
     /**
-     * @Route("/{judgehostid}/activate", name="jury_judgehost_activate")
+     * @Route("/{judgehostid}/enable", name="jury_judgehost_enable")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function activateAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
+    public function enableAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
     {
+        /** @var Judgehost $judgehost */
         $judgehost = $this->em->getRepository(Judgehost::class)->find($judgehostid);
-        $judgehost->setActive(true);
+        $judgehost->setEnabled(true);
         $this->em->flush();
-        $this->dj->auditlog('judgehost', $judgehost->getJudgehostid(), 'marked active');
+        $this->dj->auditlog('judgehost', $judgehost->getJudgehostid(), 'marked enabled');
         return $this->redirectToLocalReferrer($router, $request, $this->generateUrl('jury_judgehosts'));
     }
 
     /**
-     * @Route("/{judgehostid}/deactivate", name="jury_judgehost_deactivate")
+     * @Route("/{judgehostid}/disable", name="jury_judgehost_disable")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function deactivateAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
+    public function disableAction(RouterInterface $router, Request $request, int $judgehostid): RedirectResponse
     {
+        /** @var Judgehost $judgehost */
         $judgehost = $this->em->getRepository(Judgehost::class)->find($judgehostid);
-        $judgehost->setActive(false);
+        $judgehost->setEnabled(false);
         $this->em->flush();
-        $this->dj->auditlog('judgehost', $judgehost->getJudgehostid(), 'marked inactive');
+        $this->dj->auditlog('judgehost', $judgehost->getJudgehostid(), 'marked disabled');
         return $this->redirectToLocalReferrer($router, $request, $this->generateUrl('jury_judgehosts'));
     }
 
     /**
-     * @Route("/activate-all", methods={"POST"}, name="jury_judgehost_activate_all")
+     * @Route("/enable-all", methods={"POST"}, name="jury_judgehost_enable_all")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function activateAllAction(): RedirectResponse
+    public function enableAllAction(): RedirectResponse
     {
-        $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.active = true')->execute();
-        $this->dj->auditlog('judgehost', null, 'marked all active');
+        $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.enabled = true')->execute();
+        $this->dj->auditlog('judgehost', null, 'marked all enabled');
         return $this->redirectToRoute('jury_judgehosts');
     }
 
     /**
-     * @Route("/deactivate-all", methods={"POST"}, name="jury_judgehost_deactivate_all")
+     * @Route("/disable-all", methods={"POST"}, name="jury_judgehost_disable_all")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function deactivateAllAction(): RedirectResponse
+    public function disableAllAction(): RedirectResponse
     {
-        $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.active = false')->execute();
-        $this->dj->auditlog('judgehost', null, 'marked all inactive');
+        $this->em->createQuery('UPDATE App\Entity\Judgehost j set j.enabled = false')->execute();
+        $this->dj->auditlog('judgehost', null, 'marked all disabled');
         return $this->redirectToRoute('jury_judgehosts');
     }
 
@@ -362,44 +344,18 @@ class JudgehostController extends BaseController
         $critical_threshold = $now - $time_crit;
 
         $ret = $this->em->createQuery(
-            'UPDATE App\Entity\Judgehost j set j.active = false, j.hidden = true WHERE j.polltime IS NULL OR j.polltime < :threshold')
-            ->setParameter(':threshold', $critical_threshold)
+            'UPDATE App\Entity\Judgehost j set j.enabled = false, j.hidden = true WHERE j.polltime IS NULL OR j.polltime < :threshold')
+            ->setParameter('threshold', $critical_threshold)
             ->execute();
         $this->dj->auditlog('judgehost', null, 'auto-hiding judgehosts');
         return $this->redirectToRoute('jury_judgehosts');
     }
 
     /**
-     * @Route("/add/multiple", name="jury_judgehost_add")
-     * @IsGranted("ROLE_ADMIN")
-     */
-    public function addMultipleAction(Request $request): Response
-    {
-        $judgehosts = ['judgehosts' => [new Judgehost()]];
-        $form       = $this->createForm(JudgehostsType::class, $judgehosts);
-        $form->handleRequest($request);
-
-        if ($form->isSubmitted() && $form->isValid()) {
-            /** @var Judgehost $judgehost */
-            foreach ($form->getData()['judgehosts'] as $judgehost) {
-                $this->em->persist($judgehost);
-                $this->dj->auditlog('judgehost', $judgehost->getJudgehostid(), 'added');
-            }
-            $this->em->flush();
-
-            return $this->redirectToRoute('jury_judgehosts');
-        }
-
-        return $this->render('jury/judgehosts_add_multiple.html.twig', [
-            'form' => $form->createView(),
-        ]);
-    }
-
-    /**
      * @Route("/edit/multiple", name="jury_judgehost_edit")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function editMultipleAction(Request $request) : Response
+    public function editMultipleAction(Request $request): Response
     {
         $querybuilder = $this->em->createQueryBuilder()
             ->from(Judgehost::class, 'j')

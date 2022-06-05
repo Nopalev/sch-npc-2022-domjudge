@@ -4,7 +4,6 @@ namespace App\Controller\API;
 
 use App\Entity\Contest;
 use App\Entity\Team;
-use App\Entity\TeamAffiliation;
 use App\Service\AssetUpdateService;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
@@ -13,12 +12,10 @@ use App\Service\ImportExportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
 use OpenApi\Annotations as OA;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -37,10 +34,7 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
  */
 class TeamController extends AbstractRestController
 {
-    /**
-     * @var AssetUpdateService
-     */
-    protected $assetUpdater;
+    protected AssetUpdateService $assetUpdater;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -55,7 +49,7 @@ class TeamController extends AbstractRestController
     }
 
     /**
-     * Get all the teams for this contest
+     * Get all the teams for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -98,7 +92,7 @@ class TeamController extends AbstractRestController
     }
 
     /**
-     * Get the given team for this contest
+     * Get the given team for this contest.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
      * @OA\Response(
@@ -114,13 +108,13 @@ class TeamController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
 
     /**
-     * Get the photo for the given team
+     * Get the photo for the given team.
      * @Rest\Get("/{id}/photo", name="team_photo")
      * @OA\Response(
      *     response="200",
@@ -136,7 +130,7 @@ class TeamController extends AbstractRestController
         /** @var Team $team */
         $team = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -154,7 +148,7 @@ class TeamController extends AbstractRestController
     }
 
     /**
-     * Delete the photo for the given team
+     * Delete the photo for the given team.
      * @Rest\Delete("/{id}/photo", name="delete_team_photo")
      * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting photo succeeded")
@@ -165,7 +159,7 @@ class TeamController extends AbstractRestController
         /** @var Team $team */
         $team = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -183,7 +177,7 @@ class TeamController extends AbstractRestController
     }
 
     /**
-     * Set the photo for the given team
+     * Set the photo for the given team.
      * @Rest\POST("/{id}/photo", name="post_team_photo")
      * @Rest\PUT("/{id}/photo", name="put_team_photo")
      * @OA\RequestBody(
@@ -202,7 +196,6 @@ class TeamController extends AbstractRestController
      *     )
      * )
      * @IsGranted("ROLE_ADMIN")
-     * @OA\Response(response="400", description="Invalid data provided")
      * @OA\Response(response="204", description="Setting photo succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
@@ -211,7 +204,7 @@ class TeamController extends AbstractRestController
         /** @var Team $team */
         $team = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -240,7 +233,7 @@ class TeamController extends AbstractRestController
     }
 
     /**
-     * Add a new team
+     * Add a new team.
      *
      * @Rest\Post()
      * @IsGranted("ROLE_API_WRITER")
@@ -290,13 +283,13 @@ class TeamController extends AbstractRestController
         if ($request->query->has('category')) {
             $queryBuilder
                 ->andWhere('t.category = :category')
-                ->setParameter(':category', $request->query->get('category'));
+                ->setParameter('category', $request->query->get('category'));
         }
 
         if ($request->query->has('affiliation')) {
             $queryBuilder
                 ->andWhere('t.affiliation = :affiliation')
-                ->setParameter(':affiliation', $request->query->get('affiliation'));
+                ->setParameter('affiliation', $request->query->get('affiliation'));
         }
 
         if (!$this->dj->checkrole('api_reader') || $request->query->getBoolean('public')) {
@@ -307,15 +300,12 @@ class TeamController extends AbstractRestController
         if (!$contest->isOpenToAllTeams()) {
             $queryBuilder
                 ->andWhere('c.cid = :cid OR cc.cid = :cid')
-                ->setParameter(':cid', $contest->getCid());
+                ->setParameter('cid', $contest->getCid());
         }
 
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('t.%s', $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid');

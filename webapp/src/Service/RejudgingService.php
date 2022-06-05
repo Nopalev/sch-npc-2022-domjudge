@@ -12,7 +12,7 @@ use App\Entity\Team;
 use App\Entity\User;
 use App\Utils\Utils;
 use BadMethodCallException;
-use Doctrine\DBAL\DBALException;
+use Doctrine\DBAL\Exception as DBALException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
@@ -22,39 +22,12 @@ class RejudgingService
     const ACTION_APPLY = 'apply';
     const ACTION_CANCEL = 'cancel';
 
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ScoreboardService $scoreboardService;
+    protected EventLogService $eventLogService;
+    protected BalloonService $balloonService;
 
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var BalloonService
-     */
-    protected $balloonService;
-
-    /**
-     * RejudgingService constructor.
-     * @param EntityManagerInterface $em
-     * @param DOMJudgeService        $dj
-     * @param ScoreboardService      $scoreboardService
-     * @param EventLogService        $eventLogService
-     * @param BalloonService         $balloonService
-     */
     public function __construct(
         EntityManagerInterface $em,
         DOMJudgeService $dj,
@@ -75,29 +48,25 @@ class RejudgingService
      * @param string          $reason           Reason for this rejudging
      * @param array           $judgings         List of judgings to rejudging
      * @param bool            $autoApply        Whether the judgings should be automatically applied.
-     * @param int             $repeat
-     * @param Rejudging|null  $repeatedRejudging
      * @param array          &$skipped          Returns list of judgings not included.
      * @param callable|null   $progressReporter If set, report progress using this callback. Will get two values:
      *                                          - the progress as an integer
      *                                          - the log to display
      *
-     * @return Rejudging|null
      */
     public function createRejudging(
         string $reason,
         int $priority,
         array $judgings,
         bool $autoApply,
-        int $repeat,
+        ?int $repeat,
         ?Rejudging $repeatedRejudging,
         array &$skipped,
         ?callable $progressReporter = null
-    ) {
-        // This might take a while. Make sure we do not timeout
+    ): ?Rejudging {
+        // This might take a while. Make sure we do not timeout.
         set_time_limit(0);
 
-        /** @var Rejudging $rejudging */
         $rejudging = new Rejudging();
         $rejudging
             ->setStartUser($this->dj->getUser())
@@ -130,18 +99,18 @@ class RejudgingService
                 continue;
             }
 
-            $this->em->transactional(function () use (
+            $this->em->wrapInTransaction(function () use (
                 $priority,
                 $singleJudging,
                 $judging,
                 $rejudging
             ) {
                 if ($rejudging) {
-                    $this->em->getConnection()->executeUpdate(
+                    $this->em->getConnection()->executeStatement(
                         'UPDATE submission SET rejudgingid = :rejudgingid WHERE submitid = :submitid AND rejudgingid IS NULL',
                         [
-                            ':rejudgingid' => $rejudging->getRejudgingid(),
-                            ':submitid' => $judging->getSubmissionId(),
+                            'rejudgingid' => $rejudging->getRejudgingid(),
+                            'submitid' => $judging->getSubmissionId(),
                         ]
                     );
                 }
@@ -149,9 +118,9 @@ class RejudgingService
                 if ($singleJudging) {
                     $teamid = $judging->getSubmission()->getTeamId();
                     if ($teamid) {
-                        $this->em->getConnection()->executeUpdate(
+                        $this->em->getConnection()->executeStatement(
                             'UPDATE team SET judging_last_started = null WHERE teamid = :teamid',
-                            [ ':teamid' => $teamid ]
+                            [ 'teamid' => $teamid ]
                         );
                     }
                 }
@@ -202,9 +171,9 @@ class RejudgingService
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function finishRejudging(Rejudging $rejudging, string $action, callable $progressReporter = null)
+    public function finishRejudging(Rejudging $rejudging, string $action, ?callable $progressReporter = null): bool
     {
-        // This might take a while
+        // This might take a while.
         ini_set('max_execution_time', '300');
 
         if ($rejudging->getEndtime()) {
@@ -230,7 +199,7 @@ class RejudgingService
             }
         }
 
-        // Get all submissions that we should consider
+        // Get all submissions that we should consider.
         $submissions = $this->em->createQueryBuilder()
             ->from(Submission::class, 's')
             ->leftJoin('s.judgings', 'j', 'WITH', 'j.rejudging = :rejudging')
@@ -239,7 +208,7 @@ class RejudgingService
             ->join('s.problem', 'p')
             ->select('s.submitid, c.cid, t.teamid, p.probid, j.judgingid')
             ->andWhere('s.rejudging = :rejudging')
-            ->setParameter(':rejudging', $rejudging)
+            ->setParameter('rejudging', $rejudging)
             ->getQuery()
             ->getResult();
 
@@ -270,32 +239,32 @@ class RejudgingService
             $index++;
 
             if ($action === self::ACTION_APPLY) {
-                $this->em->transactional(function () use ($submission, $rejudgingId) {
+                $this->em->wrapInTransaction(function () use ($submission, $rejudgingId) {
                     // First invalidate old judging, may be different from prevjudgingid!
                     $this->em->getConnection()->executeQuery(
                         'UPDATE judging SET valid=0 WHERE submitid = :submitid',
-                        [':submitid' => $submission['submitid']]
+                        ['submitid' => $submission['submitid']]
                     );
 
-                    // Then set judging to valid
+                    // Then set judging to valid.
                     $this->em->getConnection()->executeQuery(
                         'UPDATE judging SET valid=1 WHERE submitid = :submitid AND rejudgingid = :rejudgingid',
-                        [':submitid' => $submission['submitid'], ':rejudgingid' => $rejudgingId]
+                        ['submitid' => $submission['submitid'], 'rejudgingid' => $rejudgingId]
                     );
 
-                    // Remove relation from submission to rejudge
+                    // Remove relation from submission to rejudge.
                     $this->em->getConnection()->executeQuery(
                         'UPDATE submission SET rejudgingid=NULL WHERE submitid = :submitid',
-                        [':submitid' => $submission['submitid']]
+                        ['submitid' => $submission['submitid']]
                     );
 
-                    // Update cache
+                    // Update caches.
                     $contest = $this->em->getRepository(Contest::class)->find($submission['cid']);
                     $team    = $this->em->getRepository(Team::class)->find($submission['teamid']);
                     $problem = $this->em->getRepository(Problem::class)->find($submission['probid']);
                     $this->scoreboardService->calculateScoreRow($contest, $team, $problem);
 
-                    // Update event log
+                    // Update event log.
                     $this->eventLogService->log('judging', $submission['judgingid'],
                                                 EventLogService::ACTION_CREATE,
                                                 $submission['cid'], null, null, false);
@@ -304,29 +273,27 @@ class RejudgingService
                         ->from(JudgingRun::class, 'r')
                         ->select('r.runid')
                         ->andWhere('r.judging = :judgingid')
-                        ->setParameter(':judgingid', $submission['judgingid'])
+                        ->setParameter('judgingid', $submission['judgingid'])
                         ->getQuery()
                         ->getResult();
-                    $runIds  = array_map(function (array $data) {
-                        return $data['runid'];
-                    }, $runData);
+                    $runIds  = array_map(fn(array $data) => $data['runid'], $runData);
                     if (!empty($runIds)) {
                         $this->eventLogService->log('judging_run', $runIds,
                                                     EventLogService::ACTION_CREATE,
                                                     $submission['cid'], null, null, false);
                     }
 
-                    // Update balloons
+                    // Update balloons.
                     $contest    = $this->em->getRepository(Contest::class)->find($submission['cid']);
                     $submission = $this->em->getRepository(Submission::class)->find($submission['submitid']);
                     $this->balloonService->updateBalloons($contest, $submission);
                 });
             } elseif ($action === self::ACTION_CANCEL) {
-                // Reset submission and invalidate judging tasks
+                // Reset submission and invalidate judging tasks.
 
                 $params = [
-                    ':rejudgingid' => $rejudgingId,
-                    ':submitid' => $submission['submitid'],
+                    'rejudgingid' => $rejudgingId,
+                    'submitid' => $submission['submitid'],
                 ];
                 $this->em->getConnection()->executeQuery(
                     'UPDATE submission
@@ -337,12 +304,12 @@ class RejudgingService
                     'UPDATE judgetask
                             SET valid = 0
                             WHERE jobid = :judgingid
-                            AND judgehostid IS NULL', [':judgingid' => $submission['judgingid']]);
+                            AND judgehostid IS NULL', ['judgingid' => $submission['judgingid']]);
                 $this->em->getConnection()->executeQuery(
                     'UPDATE judging
                             SET result = :aborted
                             WHERE judgingid = :judgingid
-                            AND result IS NULL', [':aborted' => 'aborted', ':judgingid' => $submission['judgingid']]);
+                            AND result IS NULL', ['aborted' => 'aborted', 'judgingid' => $submission['judgingid']]);
             } else {
                 $error = "Unknown action '$action' specified.";
                 throw new BadMethodCallException($error);
@@ -357,7 +324,7 @@ class RejudgingService
             }
         }
 
-        // Update the rejudging itself
+        // Update the rejudging itself.
         /** @var Rejudging $rejudging */
         $rejudging = $this->em->getRepository(Rejudging::class)->find($rejudgingId);
         $user      = $this->em->getRepository(User::class)->find($this->dj->getUser()->getUserid());
@@ -373,12 +340,10 @@ class RejudgingService
     }
 
     /**
-     * @param Rejudging $rejudging
-     * @return array
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function calculateTodo(Rejudging $rejudging)
+    public function calculateTodo(Rejudging $rejudging): array
     {
         // Make sure we have the most recent data. This is necessary to
         // guarantee that repeated rejugdings are scheduled correctly.
@@ -388,7 +353,7 @@ class RejudgingService
             ->from(Submission::class, 's')
             ->select('COUNT(s)')
             ->andWhere('s.rejudging = :rejudging')
-            ->setParameter(':rejudging', $rejudging)
+            ->setParameter('rejudging', $rejudging)
             ->getQuery()
             ->getSingleScalarResult();
 
@@ -401,7 +366,7 @@ class RejudgingService
             // We remove the association of the submission with the rejudging,
             // but not the one of the judging with the rejudging for accounting reasons.
             ->andWhere('j.valid = 0')
-            ->setParameter(':rejudging', $rejudging)
+            ->setParameter('rejudging', $rejudging)
             ->getQuery()
             ->getSingleScalarResult();
 

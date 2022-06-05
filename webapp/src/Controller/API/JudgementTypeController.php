@@ -8,9 +8,7 @@ use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use OpenApi\Annotations as OA;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Intl\Exception\NotImplementedException;
 
 /**
  * @Rest\Route("/contests/{cid}/judgement-types")
@@ -20,8 +18,7 @@ use Symfony\Component\Intl\Exception\NotImplementedException;
 class JudgementTypeController extends AbstractRestController
 {
     /**
-     * Get all the judgement types for this contest
-     * @throws Exception
+     * Get all the judgement types for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -33,18 +30,16 @@ class JudgementTypeController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/idlist")
      * @OA\Parameter(ref="#/components/parameters/strict")
+     *
+     * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : array
+    public function listAction(Request $request): array
     {
-        // Call getContestId to make sure we have an active contest
+        // Call getContestId to make sure we have an active contest.
         $this->getContestId($request);
         $ids = null;
         if ($request->query->has('ids')) {
-            $ids = $request->query->get('ids', []);
-            if (!is_array($ids)) {
-                throw new BadRequestHttpException('\'ids\' should be an array of ID\'s to fetch');
-            }
-
+            $ids = $request->query->all('ids');
             $ids = array_unique($ids);
         }
 
@@ -58,9 +53,8 @@ class JudgementTypeController extends AbstractRestController
     }
 
     /**
-     * Get the given judgement type for this contest
+     * Get the given judgement type for this contest.
      * @throws NonUniqueResultException
-     * @throws Exception
      * @Rest\Get("/{id}")
      * @OA\Response(
      *     response="200",
@@ -70,9 +64,9 @@ class JudgementTypeController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : array
+    public function singleAction(Request $request, string $id): array
     {
-        // Call getContestId to make sure we have an active contest
+        // Call getContestId to make sure we have an active contest.
         $this->getContestId($request);
         $judgementTypes = $this->getJudgementTypes([$id]);
 
@@ -84,10 +78,9 @@ class JudgementTypeController extends AbstractRestController
     }
 
     /**
-     * Get the judgement types, optionally filtered on the given ID's
-     * @throws Exception
+     * Get the judgement types, optionally filtered on the given IDs.
      */
-    protected function getJudgementTypes(array $filteredOn = null) : ?array
+    protected function getJudgementTypes(array $filteredOn = null): ?array
     {
         $verdictsConfig = $this->dj->getDomjudgeEtcDir() . '/verdicts.php';
         $verdicts       = include $verdictsConfig;
@@ -118,11 +111,11 @@ class JudgementTypeController extends AbstractRestController
 
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 
     protected function getIdField(): string
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 }

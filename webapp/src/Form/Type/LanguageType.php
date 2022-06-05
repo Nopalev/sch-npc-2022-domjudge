@@ -17,12 +17,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class LanguageType extends AbstractExternalIdEntityType
 {
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     * @throws \Exception
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $this->addExternalIdField($builder, Language::class);
         $builder->add('langid', TextType::class, [
@@ -60,13 +55,11 @@ class LanguageType extends AbstractExternalIdEntityType
             'required' => false,
             'placeholder' => '-- no executable --',
             'choice_label' => 'execid',
-            'query_builder' => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder('e')
-                    ->where('e.type = :compile')
-                    ->setParameter(':compile', 'compile')
-                    ->orderBy('e.execid');
-            },
+            'query_builder' => fn(EntityRepository $er) => $er
+                ->createQueryBuilder('e')
+                ->where('e.type = :compile')
+                ->setParameter('compile', 'compile')
+                ->orderBy('e.execid'),
         ]);
         $builder->add('extensions', CollectionType::class, [
             'error_bubbling' => false,
@@ -85,7 +78,7 @@ class LanguageType extends AbstractExternalIdEntityType
         ]);
         $builder->add('save', SubmitType::class);
 
-        // Remove ID field when doing an edit
+        // Remove ID field when doing an edit.
         $builder->addEventListener(FormEvents::PRE_SET_DATA, function (FormEvent $event) {
             /** @var Language|null $language */
             $language = $event->getData();
@@ -97,7 +90,7 @@ class LanguageType extends AbstractExternalIdEntityType
         });
     }
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => Language::class]);
     }

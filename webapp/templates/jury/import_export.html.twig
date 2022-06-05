@@ -7,7 +7,7 @@
     <h1>Import and export</h1>
 
     <div class="importexport">
-    <h2 id="problems">Problems</h2>
+    <h2 id="problemarchive">Problems</h2>
     <div class="row">
         <div class="col-md-6">
             <div class="tile">
@@ -33,7 +33,7 @@
         </div>
     </div>
 
-    <h2 id="contests">Problems</h2>
+    <h2 id="problems">Problems</h2>
     <div class="row">
         <div class="col-md-6">
             <div class="tile">
@@ -68,7 +68,7 @@
     <div class="row">
         <div class="col-md-6">
             <div class="tile">
-            <h3>Import JSON</h3>
+            <h3>Import JSON / YAML</h3>
                 {{ form(json_form) }}
             </div>
         </div>
@@ -100,17 +100,6 @@
                                 {% for sort_order, names in sort_orders %}
                                     <li>
                                         <a href="{{ path('jury_html_export', {'type': 'results', 'sort_order': sort_order}) }}">for sort order {{ sort_order }}</a>
-                                        ({{ names | join(', ') }})
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        </li>
-                        <li>
-                            ICPC site <code>results.html</code>:
-                            <ul>
-                                {% for sort_order, names in sort_orders %}
-                                    <li>
-                                        <a href="{{ path('jury_html_export', {'type': 'results-icpc', 'sort_order': sort_order}) }}">for sort order {{ sort_order }}</a>
                                         ({{ names | join(', ') }})
                                     </li>
                                 {% endfor %}

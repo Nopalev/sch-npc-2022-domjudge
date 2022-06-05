@@ -8,43 +8,24 @@ use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
 use Exception;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\Security\Core\Encoder\UserPasswordEncoderInterface;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 class UserFixture extends AbstractDefaultDataFixture implements DependentFixtureInterface
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected DOMJudgeService $dj;
+    protected LoggerInterface $logger;
+    protected UserPasswordHasherInterface $passwordHasher;
+    protected bool $debug;
 
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
-
-    /**
-     * @var UserPasswordEncoderInterface
-     */
-    protected $passwordEncoder;
-
-    /**
-     * @var bool
-     */
-    protected $debug;
-
-    public function __construct(DOMJudgeService $dj, LoggerInterface $logger, UserPasswordEncoderInterface $passwordEncoder, bool $debug)
+    public function __construct(DOMJudgeService $dj, LoggerInterface $logger, UserPasswordHasherInterface $passwordHasher, bool $debug)
     {
         $this->dj              = $dj;
         $this->logger          = $logger;
-        $this->passwordEncoder = $passwordEncoder;
+        $this->passwordHasher  = $passwordHasher;
         $this->debug           = $debug;
     }
 
-    /**
-     * @inheritDoc
-     * @throws Exception
-     */
-    public function load(ObjectManager $manager)
+    public function load(ObjectManager $manager): void
     {
         if (!($adminUser = $manager->getRepository(User::class)->findOneBy(['username' => 'admin']))) {
             $adminPasswordFile = sprintf(
@@ -60,9 +41,10 @@ class UserFixture extends AbstractDefaultDataFixture implements DependentFixture
 
             $adminUser = new User();
             $adminUser
+                ->setExternalid('admin')
                 ->setUsername('admin')
                 ->setName('Administrator')
-                ->setPassword($this->passwordEncoder->encodePassword($adminUser, trim($adminpasswordContents)))
+                ->setPassword($this->passwordHasher->hashPassword($adminUser, trim($adminpasswordContents)))
                 ->addUserRole($this->getReference(RoleFixture::ADMIN_REFERENCE));
             if ($this->debug) {
                 $domjudgeTeam = $this->getReference(TeamFixture::DOMJUDGE_REFERENCE);
@@ -78,9 +60,10 @@ class UserFixture extends AbstractDefaultDataFixture implements DependentFixture
         if (!($judgehostUser = $manager->getRepository(User::class)->findOneBy(['username' => 'judgehost']))) {
             $judgehostUser = new User();
             $judgehostUser
+                ->setExternalid('judgehost')
                 ->setUsername('judgehost')
                 ->setName('User for judgedaemons')
-                ->setPassword($this->passwordEncoder->encodePassword($judgehostUser, $this->getRestapiPassword()))
+                ->setPassword($this->passwordHasher->hashPassword($judgehostUser, $this->getRestapiPassword()))
                 ->addUserRole($this->getReference(RoleFixture::JUDGEHOST_REFERENCE));
             $manager->persist($judgehostUser);
         } else {
@@ -90,12 +73,6 @@ class UserFixture extends AbstractDefaultDataFixture implements DependentFixture
         $manager->flush();
     }
 
-    /**
-     * Get the password for the REST API
-     *
-     * @return string
-     * @throws Exception
-     */
     protected function getRestapiPassword(): string
     {
         $restapiCredentialsFile = sprintf(
@@ -125,10 +102,7 @@ class UserFixture extends AbstractDefaultDataFixture implements DependentFixture
         throw new Exception("No credentials found in REST API credentials file $restapiCredentialsFile");
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getDependencies()
+    public function getDependencies(): array
     {
         return [RoleFixture::class];
     }

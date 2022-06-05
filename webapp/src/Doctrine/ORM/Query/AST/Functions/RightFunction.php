@@ -13,7 +13,7 @@ use Doctrine\ORM\Query\SqlWalker;
 /**
  * Class RightFunction
  *
- * Right function that truncates a field from the database from the right
+ * Right function that truncates a field from the database from the right.
  *
  * RightFunction ::= "RIGHT" "(" ArithmeticPrimary "," ArithmeticPrimary ")"
  *
@@ -21,21 +21,13 @@ use Doctrine\ORM\Query\SqlWalker;
  */
 class RightFunction extends FunctionNode
 {
-    /**
-     * @var Node|null
-     */
-    protected $fieldExpression = null;
+    protected ?Node $fieldExpression = null;
+    protected ?Node $lengthExpression = null;
 
     /**
-     * @var Node|null
-     */
-    protected $lengthExpression = null;
-
-    /**
-     * @inheritdoc
      * @throws ASTException
      */
-    public function getSql(SqlWalker $sqlWalker)
+    public function getSql(SqlWalker $sqlWalker): string
     {
         return sprintf('RIGHT(%s, %s)',
                        $this->fieldExpression->dispatch($sqlWalker),
@@ -43,10 +35,9 @@ class RightFunction extends FunctionNode
     }
 
     /**
-     * @inheritdoc
      * @throws QueryException
      */
-    public function parse(Parser $parser)
+    public function parse(Parser $parser): void
     {
         $parser->match(Lexer::T_IDENTIFIER);
         $parser->match(Lexer::T_OPEN_PARENTHESIS);

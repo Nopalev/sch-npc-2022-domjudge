@@ -38,6 +38,7 @@ Options:
   -u <user>  connect to MySQL with DB admin <user>
   -p <pass>  use password <pass> for DB admin user
   -r         read DB admin password from prompt
+  -s         connect via local socket (do not specify port)
 
 Note: you may want to store your credentials in ~/.my.cnf in order to
 not have to pass any of the options above.
@@ -58,15 +59,12 @@ mysql()
 	if [ -n "$PASSWD" ]; then
 		pass="-p$PASSWD"
 	else
-		pass=""
 		[ -n "$PROMPT_PASSWD" ] && pass="-p"
 		[ -n "$DBA_PASSWD" ]    && pass="-p$DBA_PASSWD"
 	fi
-	if [ -n "$pass" ]; then
-		command mysql $user "$pass" -h "$DBHOST" -P "$DBPORT" --silent --skip-column-names "$@"
-	else
-		command mysql $user -h "$DBHOST" -P "$DBPORT" --silent --skip-column-names "$@"
-	fi
+
+	[ -z "$USE_SOCKET" ] && port="-P$DBPORT"
+	command mysql $user ${pass:+"$pass"} -h "$DBHOST" ${port:+"$port"} --silent --skip-column-names "$@"
 }
 
 # Quick shell hack to get a key from an INI file.
@@ -148,7 +146,7 @@ read_dbpasswords()
 	IFS=":"
 	# Don't pipe $PASSWDFILE into this while loop as that spawns a
 	# subshell and then variables are not retained in the original shell.
-	while read -r role host db user passwd port; do
+	while read -r role host db user passwd port dummy; do
 		# Skip lines beginning with a '#'
 		[ "x$role" != "x${role###}" ] && continue
 		domjudge_DBHOST=$host
@@ -228,7 +226,7 @@ remove_db_users()
 ### Script starts here ###
 
 # Parse command-line options:
-while getopts ':u:p:qr' OPT ; do
+while getopts ':u:p:qrs' OPT ; do
 	case "$OPT" in
 		u)
 			DBA_USER=$OPTARG
@@ -241,6 +239,9 @@ while getopts ':u:p:qr' OPT ; do
 			;;
 		r)
 			PROMPT_PASSWD=1
+			;;
+		s)
+			USE_SOCKET=1
 			;;
 		:)
 			echo "Error: option '$OPTARG' requires an argument."
@@ -327,6 +328,18 @@ upgrade)
 		echo "You may also remove those users from MySQL."
 	fi
 	read_dbpasswords
+
+	# Check if we need to upgrade the Doctrine migrations table
+	if ! echo "SHOW CREATE TABLE \`doctrine_migration_versions\`" | mysql "$DBNAME" >/dev/null 2>&1; then
+		symfony_console doctrine:migrations:sync-metadata-storage -n
+		# shellcheck disable=SC2016
+		echo 'INSERT INTO `doctrine_migration_versions`
+			(version, executed_at, execution_time)
+			SELECT concat("DoctrineMigrations\\\\Version", version), executed_at, 1
+			FROM migration_versions;' | mysql "$DBNAME"
+		echo "DROP TABLE \`migration_versions\`" | mysql "$DBNAME"
+	fi
+
 	symfony_console doctrine:migrations:migrate -n
 	DBUSER=$domjudge_DBUSER PASSWD=$domjudge_PASSWD symfony_console domjudge:load-default-data
 	verbose "DOMjudge database upgrade completed."

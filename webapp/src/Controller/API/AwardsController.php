@@ -11,13 +11,10 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\QueryBuilder;
 use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use OpenApi\Annotations as OA;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\Intl\Exception\NotImplementedException;
 
 /**
  * @Rest\Route("/contests/{cid}/awards")
@@ -29,14 +26,8 @@ use Symfony\Component\Intl\Exception\NotImplementedException;
  */
 class AwardsController extends AbstractRestController
 {
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
+    protected ScoreboardService $scoreboardService;
 
-    /**
-     * ScoreboardController constructor.
-     */
     public function __construct(
         EntityManagerInterface $entityManager,
         DOMJudgeService $DOMJudgeService,
@@ -49,7 +40,7 @@ class AwardsController extends AbstractRestController
     }
 
     /**
-     * Get all the awards standings for this contest
+     * Get all the awards standings for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -68,7 +59,7 @@ class AwardsController extends AbstractRestController
     }
 
     /**
-     * Get the specific award for this contest
+     * Get the specific award for this contest.
      * @Rest\Get("/{id}")
      * @OA\Response(
      *     response="200",
@@ -91,12 +82,11 @@ class AwardsController extends AbstractRestController
     }
 
     /**
-     * Get the awards data for the given request and optional award ID
-     * @throws Exception
+     * Get the awards data for the given request and optional award ID.
      */
     protected function getAwardsData(Request $request, string $requestedType = null): ?array
     {
-        // TODO: move this to a service so the scoreboard can use its logic
+        // TODO: move this to a service so the scoreboard can use its logic.
         // Probably best to do it when we implement https://github.com/DOMjudge/domjudge/issues/1079
 
         $public = !$this->dj->checkrole('api_reader');
@@ -115,13 +105,13 @@ class AwardsController extends AbstractRestController
         $group_winners = $problem_winners = [];
         $groups = [];
         foreach ($scoreboard->getTeams() as $team) {
-            $teamid = (string)$team->getApiId($this->eventLogService);
+            $teamid = $team->getApiId($this->eventLogService);
             if ($scoreboard->isBestInCategory($team)) {
                 $group_winners[$team->getCategory()->getCategoryId()][] = $teamid;
                 $groups[$team->getCategory()->getCategoryid()] = $team->getCategory()->getName();
             }
             foreach($scoreboard->getProblems() as $problem) {
-                $probid = (string)$problem->getApiId($this->eventLogService);
+                $probid = $problem->getApiId($this->eventLogService);
                 if ($scoreboard->solvedFirst($team, $problem)) {
                     $problem_winners[$probid][] = $teamid;
                 }
@@ -149,10 +139,11 @@ class AwardsController extends AbstractRestController
             $results[] = $result;
         }
         $overall_winners = $medal_winners = [];
-        // can we assume this is ordered just walk the first 12+B entries?
+
+        // Can we assume this is ordered just walk the first 12+B entries?
         foreach ($scoreboard->getScores() as $teamScore) {
             $rank = $teamScore->rank;
-            $teamid = (string)$teamScore->team->getApiId($this->eventLogService);
+            $teamid = $teamScore->team->getApiId($this->eventLogService);
             if ($rank === 1) {
                 $overall_winners[] = $teamid;
             }
@@ -197,11 +188,11 @@ class AwardsController extends AbstractRestController
 
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 
     protected function getIdField(): string
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 }

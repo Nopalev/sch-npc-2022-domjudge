@@ -6,6 +6,7 @@ use App\Controller\BaseController;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
 use App\Entity\ImmutableExecutable;
+use App\Entity\Role;
 use App\Form\Type\ExecutableType;
 use App\Form\Type\ExecutableUploadType;
 use App\Service\ConfigurationService;
@@ -13,13 +14,14 @@ use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
-use Exception;
+use FOS\RestBundle\Controller\Annotations as Rest;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Component\Form\Exception\InvalidArgumentException;
 use Symfony\Component\Form\Extension\Core\Type\FileType;
 use Symfony\Component\Form\Extension\Core\Type\SubmitType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
@@ -33,30 +35,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ExecutableController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var KernelInterface
-     */
-    protected $kernel;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected KernelInterface $kernel;
+    protected EventLogService $eventLogService;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -75,7 +58,7 @@ class ExecutableController extends BaseController
     /**
      * @Route("", name="jury_executables")
      */
-    public function indexAction(Request $request) : Response
+    public function indexAction(Request $request): Response
     {
         $data = [];
         $form = $this->createForm(ExecutableUploadType::class, $data);
@@ -100,7 +83,7 @@ class ExecutableController extends BaseController
         foreach ($executables as $e) {
             $execdata    = [];
             $execactions = [];
-            // Get whatever fields we can from the team object itself
+            // Get whatever fields we can from the team object itself.
             foreach ($table_fields as $k => $v) {
                 if ($propertyAccessor->isReadable($e, $k)) {
                     $execdata[$k] = ['value' => $propertyAccessor->getValue($e, $k)];
@@ -146,7 +129,7 @@ class ExecutableController extends BaseController
      * @Route("/add", name="jury_executable_add")
      * @IsGranted("ROLE_ADMIN")
      */
-    public function addAction(Request $request) : Response
+    public function addAction(Request $request): Response
     {
         $data = [];
         $form = $this->createForm(ExecutableUploadType::class, $data);
@@ -210,9 +193,8 @@ class ExecutableController extends BaseController
 
     /**
      * @Route("/{execId}", name="jury_executable")
-     * @throws Exception
      */
-    public function viewAction(Request $request, string $execId) : Response
+    public function viewAction(string $execId): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
@@ -229,23 +211,9 @@ class ExecutableController extends BaseController
     }
 
     /**
-     * @Route("/{execId}/content", name="jury_executable_content")
-     */
-    public function contentAction(string $execId) : Response
-    {
-        /** @var Executable $executable */
-        $executable = $this->em->getRepository(Executable::class)->find($execId);
-        if (!$executable) {
-            throw new NotFoundHttpException(sprintf('Executable with ID %s not found', $execId));
-        }
-
-        return $this->render('jury/executable_content.html.twig', $this->dataForEditor($executable));
-    }
-
-    /**
      * @Route("/{execId}/download", name="jury_executable_download")
      */
-    public function downloadAction(string $execId) : Response
+    public function downloadAction(string $execId): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
@@ -260,33 +228,83 @@ class ExecutableController extends BaseController
     }
 
     /**
-     * @Route("/{execId}/download/{index}", name="jury_executable_download_single")
+     * @Route("/{execId}/delete/{rank}", name="jury_executable_delete_single")
+     * @IsGranted("ROLE_ADMIN")
      */
-    public function downloadSingleAction(string $execId, int $index) : Response
+    public function deleteSingleAction(Request $request, string $execId, int $rank): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
         if (!$executable) {
-            throw new NotFoundHttpException(sprintf('Executable with ID %s not found', $execId));
+            throw new NotFoundHttpException(sprintf('Executable with ID %s not found.', $execId));
+        }
+
+        /** @var ExecutableFile[] $files */
+        $files = array_values($executable->getImmutableExecutable()->getFiles()->toArray());
+        $file = null;
+        foreach ($files as $file) {
+            if ($file->getRank() == $rank) {
+                break;
+            }
+        }
+        if (!$file) {
+            throw new NotFoundHttpException(sprintf('File with rank %d not found in executable with ID %s.', $rank, $execId));
+        }
+
+        if ($request->isMethod('GET')) {
+            $data = [
+                'type' => 'ExecutableFile',
+                'primaryKey' => $execId,
+                'description' => $file->getFilename(),
+                'messages' => [],
+                'isError' => false,
+                'showModalSubmit' => true,
+                'modalUrl' => $request->getRequestUri(),
+                'redirectUrl' => $this->generateUrl('jury_executable_edit_files', ['execId' => $execId]),
+            ];
+            if ($request->isXmlHttpRequest()) {
+                return $this->render('jury/delete_modal.html.twig', $data);
+            }
+
+            return $this->render('jury/delete.html.twig', $data);
+        } else {
+            $this->em->remove($file);
+            $this->em->flush();
+            $redirectUrl = $this->generateUrl('jury_executable_edit_files', ['execId' => $execId]);
+            if ($request->isXmlHttpRequest()) {
+                return new JsonResponse(['url' => $redirectUrl]);
+            }
+            return $this->redirect($redirectUrl);
+        }
+    }
+
+    /**
+     * @Route("/{execId}/download/{rank}", name="jury_executable_download_single")
+     */
+    public function downloadSingleAction(string $execId, int $rank): Response
+    {
+        /** @var Executable $executable */
+        $executable = $this->em->getRepository(Executable::class)->find($execId);
+        if (!$executable) {
+            throw new NotFoundHttpException(sprintf('Executable with ID %s not found.', $execId));
         }
 
         /** @var ExecutableFile[] $files */
         $files = array_values($executable->getImmutableExecutable()->getFiles()->toArray());
         foreach ($files as $file) {
-            if ($file->getRank() == $index) {
+            if ($file->getRank() == $rank) {
                 return Utils::streamAsBinaryFile($file->getFileContent(), $file->getFilename());
             }
         }
 
-        throw new NotFoundHttpException(sprintf('No file with index %d found', $index));
+        throw new NotFoundHttpException(sprintf('No file with rank %d found.', $rank));
     }
 
     /**
      * @Route("/{execId}/edit", name="jury_executable_edit")
      * @IsGranted("ROLE_ADMIN")
-     * @throws Exception
      */
-    public function editAction(Request $request, string $execId) : Response
+    public function editAction(Request $request, string $execId): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
@@ -344,9 +362,8 @@ class ExecutableController extends BaseController
     /**
      * @Route("/{execId}/delete", name="jury_executable_delete")
      * @IsGranted("ROLE_ADMIN")
-     * @return Response
      */
-    public function deleteAction(Request $request, string $execId) : Response
+    public function deleteAction(Request $request, string $execId): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
@@ -360,9 +377,8 @@ class ExecutableController extends BaseController
 
     /**
      * @Route("/{execId}/edit-files", name="jury_executable_edit_files")
-     * @IsGranted("ROLE_ADMIN")
      */
-    public function editFilesAction(Request $request, string $execId) : Response
+    public function editFilesAction(Request $request, string $execId): Response
     {
         /** @var Executable $executable */
         $executable = $this->em->getRepository(Executable::class)->find($execId);
@@ -376,8 +392,10 @@ class ExecutableController extends BaseController
             $data['source' . $idx] = $content;
         }
 
-        $formBuilder = $this->createFormBuilder($data)
-            ->add('submit', SubmitType::class, ['label' => 'Save files']);
+        $formBuilder = $this->createFormBuilder($data);
+        if ($this->isGranted('ROLE_ADMIN')) {
+            $formBuilder->add('submit', SubmitType::class, ['label' => 'Save files']);
+        }
 
         foreach ($editorData['files'] as $idx => $content) {
             $formBuilder->add('source' . $idx, TextareaType::class);
@@ -385,7 +403,7 @@ class ExecutableController extends BaseController
 
         $form = $formBuilder->getForm();
 
-        // Handle the form if it is submitted
+        // Handle the form if it is submitted.
         $form->handleRequest($request);
         if ($form->isSubmitted() && $form->isValid()) {
             $submittedData = $form->getData();
@@ -394,6 +412,10 @@ class ExecutableController extends BaseController
             $this->em->persist($immutableExecutable);
 
             foreach ($editorData['filenames'] as $idx => $filename) {
+                if (!$this->isGranted('ROLE_ADMIN')) {
+                    $this->addFlash('danger', 'You must have the admin role to submit changes.');
+                    return $this->redirectToRoute('jury_executable', ['execId' => $executable->getExecid()]);
+                }
                 $newContent = str_replace("\r\n", "\n", $submittedData['source' . $idx]);
 
                 $executableFile = new ExecutableFile();
@@ -421,26 +443,31 @@ class ExecutableController extends BaseController
     }
 
     /**
-     * Get the data to use for the executable editor
+     * Get the data to use for the executable editor.
      */
-    protected function dataForEditor(Executable $executable) : array
+    protected function dataForEditor(Executable $executable): array
     {
         $immutable_executable = $executable->getImmutableExecutable();
 
-        $filenames     = [];
-        $file_contents = [];
-        $aceFilenames  = [];
-        $skippedBinary = [];
+        $filenames      = [];
+        $file_contents  = [];
+        $aceFilenames   = [];
+        $skippedBinary  = [];
         $executableBits = [];
-        foreach ($immutable_executable->getFiles() as $file) {
+        $ranks          = [];
+
+        $files = $immutable_executable->getFiles()->toArray();
+        usort($files, fn($a,$b) => $a->getFilename() <=> $b->getFilename());
+        foreach ($files as $file) {
             /** @var ExecutableFile $file */
             $filename = $file->getFilename();
             $content = $file->getFileContent();
-            if (!mb_check_encoding($content, 'ASCII')) {
+            if (!mb_detect_encoding($content, null, true)) {
                 $skippedBinary[] = $filename;
-                continue; // skip binary files
+                continue; // Skip binary files.
             }
             $filenames[] = $filename;
+            $ranks[] = $file->getRank();
             $file_contents[] = $content;
             $executableBits[] = $file->isExecutable();
 
@@ -448,7 +475,7 @@ class ExecutableController extends BaseController
                 $aceFilenames[] = $filename;
             } else {
                 [$firstLine] = explode("\n", $content, 2);
-                // If the file does not contain a dot, see if we have a shebang which we can use as filename
+                // If the file does not contain a dot, see if we have a shebang which we can use as filename.
                 if (preg_match('/^#!.*\/([^\/]+)$/', $firstLine, $matches)) {
                     $aceFilenames[] = sprintf('temp.%s', $matches[1]);
                 } else {
@@ -462,6 +489,7 @@ class ExecutableController extends BaseController
             'skippedBinary' => $skippedBinary,
             'filenames' => $filenames,
             'aceFilenames' => $aceFilenames,
+            'ranks' => $ranks,
             'files' => $file_contents,
             'executableBits' => $executableBits,
         ];

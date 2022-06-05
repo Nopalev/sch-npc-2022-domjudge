@@ -27,7 +27,6 @@ use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
@@ -42,10 +41,7 @@ use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
  */
 class SubmissionController extends AbstractRestController
 {
-    /**
-     * @var SubmissionService
-     */
-    protected $submissionService;
+    protected SubmissionService $submissionService;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -59,7 +55,7 @@ class SubmissionController extends AbstractRestController
     }
 
     /**
-     * Get all the submissions for this contest
+     * Get all the submissions for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -84,13 +80,13 @@ class SubmissionController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : Response
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given submission for this contest
+     * Get the given submission for this contest.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
      * @OA\Response(
@@ -106,13 +102,13 @@ class SubmissionController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
 
     /**
-     * Add a submission to this contest
+     * Add a submission to this contest.
      * @Rest\Post("")
      * @Rest\Post("/")
      * @Rest\Put("/{id}")
@@ -209,7 +205,6 @@ class SubmissionController extends AbstractRestController
      *     )
      * )
      * @throws NonUniqueResultException
-     * @throws Exception
      */
     public function addSubmissionAction(Request $request, ?string $id): Response
     {
@@ -228,22 +223,20 @@ class SubmissionController extends AbstractRestController
                 }
             }
             if (!$hasAny) {
-                $requiredListQuoted = array_map(function ($item) {
-                    return "'$item'";
-                }, $requiredList);
+                $requiredListQuoted = array_map(fn($item) => "'$item'", $requiredList);
                 throw new BadRequestHttpException(
                     sprintf("One of the arguments %s is mandatory.", implode(', ', $requiredListQuoted)));
             }
         }
 
-        // By default, use the user and team of the user
+        // By default, use the user and team of the user.
         $user = $this->dj->getUser();
         $team = $user->getTeam();
         if ($teamId = $request->request->get('team_id')) {
             $idField = $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid';
             $method  = sprintf('get%s', ucfirst($idField));
 
-            // If the user is an admin or API writer, allow it to specify the team
+            // If the user is an admin or API writer, allow it to specify the team.
             if ($this->isGranted('ROLE_API_WRITER')) {
                 /** @var Contest $contest */
                 $contest = $this->em->getRepository(Contest::class)->find($this->getContestId($request));
@@ -260,9 +253,9 @@ class SubmissionController extends AbstractRestController
         }
 
         if ($userId = $request->request->get('user_id')) {
-            // If the current user is an admin or API writer, allow it to specify the user
+            // If the current user is an admin or API writer, allow it to specify the user.
             if ($this->isGranted('ROLE_API_WRITER')) {
-                // Load the user
+                // Load the user.
                 /** @var User|null $user */
                 $user = $this->em->getRepository(User::class)->find($userId);
 
@@ -283,7 +276,7 @@ class SubmissionController extends AbstractRestController
             }
         }
 
-        // Load the problem
+        // Load the problem.
         /** @var ContestProblem $problem */
         $problem = $this->em->createQueryBuilder()
             ->from(ContestProblem::class, 'cp')
@@ -294,8 +287,8 @@ class SubmissionController extends AbstractRestController
                                $this->eventLogService->externalIdFieldForEntity(Problem::class) ?? 'probid'))
             ->andWhere('cp.contest = :contest')
             ->andWhere('cp.allowSubmit = 1')
-            ->setParameter(':problem', $data['problem'])
-            ->setParameter(':contest', $this->getContestId($request))
+            ->setParameter('problem', $data['problem'])
+            ->setParameter('contest', $this->getContestId($request))
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -304,7 +297,7 @@ class SubmissionController extends AbstractRestController
                 sprintf("Problem '%s' not found or not submittable.", $data['problem']));
         }
 
-        // Load the language
+        // Load the language.
         /** @var Language $language */
         $language = $this->em->createQueryBuilder()
             ->from(Language::class, 'lang')
@@ -312,7 +305,7 @@ class SubmissionController extends AbstractRestController
             ->andWhere(sprintf('lang.%s = :language',
                                $this->eventLogService->externalIdFieldForEntity(Language::class) ?? 'langid'))
             ->andWhere('lang.allowSubmit = 1')
-            ->setParameter(':language', $data['language'])
+            ->setParameter('language', $data['language'])
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -321,7 +314,7 @@ class SubmissionController extends AbstractRestController
                 sprintf("Language '%s' not found or not submittable.", $data['language']));
         }
 
-        // Determine the entry point
+        // Determine the entry point.
         $entryPoint = null;
         if ($language->getRequireEntryPoint()) {
             if (!$request->request->get('entry_point')) {
@@ -354,14 +347,14 @@ class SubmissionController extends AbstractRestController
                     throw new BadRequestHttpException(sprintf("ID '%s' is not valid.", $submissionId));
                 }
 
-                // Check if we already have a submission with this ID
+                // Check if we already have a submission with this ID.
                 $existingSubmission = $this->em->createQueryBuilder()
                     ->from(Submission::class, 's')
                     ->select('s')
                     ->andWhere('(s.externalid IS NULL AND s.submitid = :submitid) OR s.externalid = :submitid')
                     ->andWhere('s.contest = :contest')
-                    ->setParameter(':submitid', $submissionId)
-                    ->setParameter(':contest', $problem->getContest())
+                    ->setParameter('submitid', $submissionId)
+                    ->setParameter('contest', $problem->getContest())
                     ->getQuery()
                     ->getOneOrNullResult();
                 if ($existingSubmission !== null) {
@@ -375,9 +368,9 @@ class SubmissionController extends AbstractRestController
         $tempFiles = [];
 
         if ($request->request->has('files')) {
-            // CCS spec format, files are a ZIP, get them and transform them into a file object
-            $filesList = $request->request->get('files');
-            if (!is_array($filesList) || count($filesList) !== 1 || !isset($filesList[0]['data'])) {
+            // CCS spec format, files are a ZIP, get them and transform them into a file object.
+            $filesList = $request->request->all('files');
+            if (count($filesList) !== 1 || !isset($filesList[0]['data'])) {
                 throw new BadRequestHttpException("The 'files' attribute must be an array with a single item, containing an object with a base64 encoded data field.");
             }
 
@@ -393,7 +386,7 @@ class SubmissionController extends AbstractRestController
 
             $tmpDir = $this->dj->getDomjudgeTmpDir();
 
-            // Now write the data to a temporary ZIP file
+            // Now write the data to a temporary ZIP file.
             if (!($tempZipFile = tempnam($tmpDir, 'submission_zip-'))) {
                 throw new ServiceUnavailableHttpException(null,
                     sprintf('Could not create temporary file in directory %s', $tmpDir));
@@ -430,20 +423,20 @@ class SubmissionController extends AbstractRestController
             $zip->close();
             unlink($tempZipFile);
         } else {
-            // Files are uploaded as actual files, get them
+            // Files are uploaded as actual files, get them.
             $files = $request->files->get('code') ?: [];
             if (!is_array($files)) {
                 $files = [$files];
             }
         }
 
-        // Now submit the solution
+        // Now submit the solution.
         $submission = $this->submissionService->submitSolution(
             $team, $user, $problem, $problem->getContest(), $language,
             $files, 'API', null, null, $entryPoint, $submissionId, $time, $message
         );
 
-        // Clean up temporary if needed
+        // Clean up temporary if needed.
         foreach ($tempFiles as $tempFile) {
             unlink($tempFile);
         }
@@ -456,10 +449,9 @@ class SubmissionController extends AbstractRestController
     }
 
     /**
-     * Get the files for the given submission as a ZIP archive
+     * Get the files for the given submission as a ZIP archive.
      * @Rest\Get("/{id}/files", name="submission_files")
      * @IsGranted("ROLE_API_SOURCE_READER")
-     * @return Response|StreamedResponse
      * @throws NonUniqueResultException
      * @OA\Response(
      *     response="200",
@@ -472,12 +464,12 @@ class SubmissionController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
-    public function getSubmissionFilesAction(Request $request, string $id)
+    public function getSubmissionFilesAction(Request $request, string $id): Response
     {
         $queryBuilder = $this->getQueryBuilder($request)
             ->join('s.files', 'f')
             ->select('s, f')
-            ->setParameter(':id', $id);
+            ->setParameter('id', $id);
 
         $idField = $this->getIdField();
         if ($idField === 's.submitid') {
@@ -499,7 +491,7 @@ class SubmissionController extends AbstractRestController
     }
 
     /**
-     * Get the source code of all the files for the given submission
+     * Get the source code of all the files for the given submission.
      * @Rest\Get("/{id}/source-code")
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST')")
      * @throws NonUniqueResultException
@@ -510,7 +502,7 @@ class SubmissionController extends AbstractRestController
      * )
      * @OA\Parameter(ref="#/components/parameters/id")
      */
-    public function getSubmissionSourceCodeAction(Request $request, string $id) : array
+    public function getSubmissionSourceCodeAction(Request $request, string $id): array
     {
         $queryBuilder = $this->em->createQueryBuilder()
             ->from(SubmissionFile::class, 'f')
@@ -518,8 +510,8 @@ class SubmissionController extends AbstractRestController
             ->select('f, s')
             ->andWhere('s.contest = :cid')
             ->andWhere('s.submitid = :submitid')
-            ->setParameter(':cid', $this->getContestId($request))
-            ->setParameter(':submitid', $id)
+            ->setParameter('cid', $this->getContestId($request))
+            ->setParameter('submitid', $id)
             ->orderBy('f.ranknumber');
 
         /** @var SubmissionFile[] $files */
@@ -555,17 +547,17 @@ class SubmissionController extends AbstractRestController
             ->andWhere('s.valid = 1')
             ->andWhere('s.contest = :cid')
             ->andWhere('t.enabled = 1')
-            ->setParameter(':cid', $cid)
+            ->setParameter('cid', $cid)
             ->orderBy('s.submitid');
 
         if ($request->query->has('language_id')) {
             $queryBuilder
                 ->andWhere('s.language = :langid')
-                ->setParameter(':langid', $request->query->get('language_id'));
+                ->setParameter('langid', $request->query->get('language_id'));
         }
 
-        // If an ID has not been given directly, only show submissions before contest end
-        // This allows us to use eventlog on too-late submissions while not exposing them in the API directly
+        // If an ID has not been given directly, only show submissions before contest end.
+        // This allows us to use eventlog on too-late submissions while not exposing them in the API directly.
         if (!$request->attributes->has('id') && !$request->query->has('ids') && !$this->dj->checkrole('admin')) {
             $queryBuilder->andWhere('s.submittime < c.endtime');
         }
@@ -580,7 +572,7 @@ class SubmissionController extends AbstractRestController
                     ->andWhere('cat.visible = 1 OR s.team = :team')
                     ->setParameter('team', $this->dj->getUser()->getTeam());
             } else {
-                // Hide all submissions made by non public teams
+                // Hide all submissions made by non-public teams.
                 $queryBuilder->andWhere('cat.visible = 1');
             }
         }
@@ -588,9 +580,6 @@ class SubmissionController extends AbstractRestController
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('s.%s', $this->eventLogService->externalIdFieldForEntity(Submission::class) ?? 'submitid');

@@ -12,15 +12,12 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 class BodyTooBigListener implements EventSubscriberInterface
 {
-    /**
-     * @inheritDoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
-        return [ControllerEvent::class => 'onKernelController',];
+        return [ControllerEvent::class => 'onKernelController'];
     }
 
-    public function onKernelController(ControllerEvent $event)
+    public function onKernelController(ControllerEvent $event): void
     {
         // When we have a POST, PUT or PATCH but no request or file attributes
         // but we do have a non-zero content-length header, the caller
@@ -31,7 +28,7 @@ class BodyTooBigListener implements EventSubscriberInterface
         $request = $event->getRequest();
         if ($request->isMethod('POST') || $request->isMethod('PATCH') || $request->isMethod('PUT')) {
             if ($request->request->count() === 0 && $request->files->count() === 0 &&
-                $request->headers->get('content-length', 0) > 0) {
+                $request->headers->get('content-length', '0') > 0) {
                 $msg = sprintf(
                     "Body data exceeded php.ini's 'post_max_size' directive (currently set to %s)",
                     ini_get('post_max_size')

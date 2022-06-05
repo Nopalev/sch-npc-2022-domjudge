@@ -10,10 +10,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class LoadExampleDataCommand extends Command
 {
-    /**
-     * @inheritDoc
-     */
-    protected function configure()
+    protected function configure(): void
     {
         $this
             ->setName('domjudge:load-example-data')
@@ -21,10 +18,9 @@ class LoadExampleDataCommand extends Command
     }
 
     /**
-     * @inheritDoc
      * @throws Exception
      */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $command   = $this->getApplication()->find('doctrine:fixtures:load');
         $arguments = [

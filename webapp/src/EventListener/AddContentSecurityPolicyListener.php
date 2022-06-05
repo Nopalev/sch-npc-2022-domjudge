@@ -8,28 +8,22 @@ use Symfony\Component\HttpKernel\Profiler\Profiler;
 
 class AddContentSecurityPolicyListener implements EventSubscriberInterface
 {
-    /**
-     * @var Profiler|null
-     */
-    protected $profiler;
+    protected ?Profiler $profiler;
 
     public function __construct(?Profiler $profiler)
     {
         $this->profiler = $profiler;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [ResponseEvent::class => 'onKernelResponse'];
     }
 
-    public function onKernelResponse(ResponseEvent $event)
+    public function onKernelResponse(ResponseEvent $event): void
     {
         // Set the correct CSP based on whether the profiler is enabled, since
-        // the profiler requires 'unsafe-eval' for script-src 'self'
+        // the profiler requires 'unsafe-eval' for script-src 'self'.
         $response = $event->getResponse();
         $cspExtra = $this->profiler ? "'unsafe-eval'" : "";
         $csp = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' $cspExtra; img-src 'self' data:";

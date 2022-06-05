@@ -15,7 +15,6 @@ use App\Service\SubmissionService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\Query\Expr\Join;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -35,30 +34,11 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class SubmissionController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var SubmissionService
-     */
-    protected $submissionService;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var FormFactoryInterface
-     */
-    protected $formFactory;
+    protected EntityManagerInterface $em;
+    protected SubmissionService $submissionService;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected FormFactoryInterface $formFactory;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -76,7 +56,6 @@ class SubmissionController extends BaseController
 
     /**
      * @Route("/submit/{problem}", name="team_submit")
-     * @throws Exception
      */
     public function createAction(Request $request, ?Problem $problem = null): Response
     {
@@ -140,7 +119,7 @@ class SubmissionController extends BaseController
      * @Route("/submission/{submitId<\d+>}", name="team_submission")
      * @throws NonUniqueResultException
      */
-    public function viewAction(Request $request, int $submitId) : Response
+    public function viewAction(Request $request, int $submitId): Response
     {
         $verificationRequired = (bool)$this->config->get('verification_required');
         $showCompile      = $this->config->get('show_compile');
@@ -160,12 +139,12 @@ class SubmissionController extends BaseController
             ->andWhere('j.submission = :submitId')
             ->andWhere('j.valid = 1')
             ->andWhere('s.team = :team')
-            ->setParameter(':submitId', $submitId)
-            ->setParameter(':team', $team)
+            ->setParameter('submitId', $submitId)
+            ->setParameter('team', $team)
             ->getQuery()
             ->getOneOrNullResult();
 
-        // Update seen status when viewing submission
+        // Update seen status when viewing submission.
         if ($judging && $judging->getSubmission()->getSubmittime() < $contest->getEndtime() &&
             (!$verificationRequired || $judging->getVerified())) {
             $judging->setSeen(true);
@@ -185,8 +164,8 @@ class SubmissionController extends BaseController
                 ->select('t', 'jr', 'tc')
                 ->andWhere('t.problem = :problem')
                 ->andWhere('t.sample = 1')
-                ->setParameter(':judging', $judging)
-                ->setParameter(':problem', $judging->getSubmission()->getProblem())
+                ->setParameter('judging', $judging)
+                ->setParameter('problem', $judging->getSubmission()->getProblem())
                 ->orderBy('t.ranknumber');
 
             if ($outputDisplayLimit < 0) {
@@ -203,8 +182,8 @@ class SubmissionController extends BaseController
                     ->addSelect('TRUNCATE(jro.output_diff, :outputDisplayLimit, :outputTruncateMessage) AS output_diff')
                     ->addSelect('TRUNCATE(jro.output_error, :outputDisplayLimit, :outputTruncateMessage) AS output_error')
                     ->addSelect('TRUNCATE(jro.output_system, :outputDisplayLimit, :outputTruncateMessage) AS output_system')
-                    ->setParameter(':outputDisplayLimit', $outputDisplayLimit)
-                    ->setParameter(':outputTruncateMessage', $outputTruncateMessage);
+                    ->setParameter('outputDisplayLimit', $outputDisplayLimit)
+                    ->setParameter('outputTruncateMessage', $outputTruncateMessage);
             }
 
             $runs = $queryBuilder
@@ -232,7 +211,7 @@ class SubmissionController extends BaseController
      * @Route("/submission/{submitId<\d+>}/download", name="team_submission_download")
      * @throws NonUniqueResultException
      */
-    public function downloadAction(int $submitId) : Response
+    public function downloadAction(int $submitId): Response
     {
         $allowDownload = (bool)$this->config->get('allow_team_submission_download');
         if (!$allowDownload) {
@@ -248,8 +227,8 @@ class SubmissionController extends BaseController
             ->select('s, f')
             ->andWhere('s.submitid = :submitId')
             ->andWhere('s.team = :team')
-            ->setParameter(':submitId', $submitId)
-            ->setParameter(':team', $team)
+            ->setParameter('submitId', $submitId)
+            ->setParameter('team', $team)
             ->getQuery()
             ->getOneOrNullResult();
 

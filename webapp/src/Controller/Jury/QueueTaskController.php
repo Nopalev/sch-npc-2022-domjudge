@@ -32,10 +32,7 @@ class QueueTaskController extends BaseController
         JudgeTask::PRIORITY_HIGH => 'thermometer-full',
     ];
 
-    /**
-     * @var EntityManagerInterface
-     */
-    private $em;
+    private EntityManagerInterface $em;
 
     public function __construct(EntityManagerInterface $em)
     {
@@ -77,16 +74,16 @@ class QueueTaskController extends BaseController
                 }
             }
 
-            // Use priority map to set priority
+            // Use priority map to set priority.
             $queueTaskData['priority']['value'] = static::PRIORITY_MAP[$queueTaskData['priority']['value']];
 
-            // Add some links
+            // Add some links.
             $queueTaskData['team.name']['link'] = $this->generateUrl('jury_team', ['teamId' => $queueTask->getTeam()->getTeamid()]);
             $queueTaskData['jobid']['link'] = $this->generateUrl('jury_submission_by_judging', ['jid' => $queueTask->getJobId()]);
 
-            // Format start time
+            // Format start time.
             if (!empty($queueTaskData['starttime']['value'])) {
-                $queueTaskData['starttime']['value'] = Utils::printtime($queueTaskData['starttime']['value'], "%Y-%m-%d %H:%M:%S (%Z)");
+                $queueTaskData['starttime']['value'] = Utils::printtime($queueTaskData['starttime']['value'], "Y-m-d H:i:s (T)");
             } else {
                 $queueTaskData['starttime']['value'] = 'not started yet';
             }
@@ -206,14 +203,14 @@ class QueueTaskController extends BaseController
                 }
             }
 
-            // Format start time
+            // Format start time.
             if (!empty($judgeTaskData['starttime']['value'])) {
-                $judgeTaskData['starttime']['value'] = Utils::printtime($judgeTaskData['starttime']['value'], "%Y-%m-%d %H:%M:%S (%Z)");
+                $judgeTaskData['starttime']['value'] = Utils::printtime($judgeTaskData['starttime']['value'], "Y-m-d H:i:s (T)");
             } else {
                 $judgeTaskData['starttime']['value'] = 'not started yet';
             }
 
-            // Add link or set empty value for judgehost
+            // Add link or set empty value for judgehost.
             if (isset($judgeTaskData['judgehost.hostname']['value'])) {
                 $judgeTaskData['judgehost.hostname']['value'] = Utils::printhost($judgeTaskData['judgehost.hostname']['value']);
                 $judgeTaskData['judgehost.hostname']['link'] = $this->generateUrl('jury_judgehost', ['judgehostid' => $judgeTask->getJudgehost()->getJudgehostid()]);
@@ -222,7 +219,7 @@ class QueueTaskController extends BaseController
             $judgeTaskData['judgehost.hostname']['default'] = '-';
             $judgeTaskData['judgehost.hostname']['cssclass'] = 'text-monospace small';
 
-            // Map valid field
+            // Map valid field.
             $judgeTaskData['valid']['value'] = $judgeTaskData['valid']['value'] ? 'yes' : 'no';
 
             $judgeTasksTable[] = [

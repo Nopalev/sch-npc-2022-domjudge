@@ -16,6 +16,11 @@ myhttp() {
     http --check-status "$@"
 }
 
+if ! command -v http 1>/dev/zero; then
+    echo "Please install httpie."
+    exit 1
+fi
+
 if [ -r groups.json ]; then
     read -r -p "Import groups (from groups.json)? [y/N] " response
     response=${response,,}
@@ -35,7 +40,7 @@ elif [ -r groups.tsv ]; then
         echo "Skipping groups import."
     fi
 else
-    echo "Neither 'groups.json'n or 'groups.tsv' found, skipping groups import."
+    echo "Neither 'groups.json' nor 'groups.tsv' found, skipping groups import."
 fi
 
 if [ -r organizations.json ]; then
@@ -73,6 +78,36 @@ else
     echo "Neither 'teams.json' nor 'teams2.tsv' found, skipping teams import."
 fi
 
+if [ -r accounts.json ]; then
+    read -r -p "Import accounts (from accounts.json)? [y/N] " response
+    response=${response,,}
+    if [[ $response =~ ^(yes|y| ) ]]; then
+        echo "Importing accounts."
+        myhttp -b -f POST "$api_url/users/accounts" json@accounts.json
+    else
+        echo "Skipping accounts import."
+    fi
+elif [ -r accounts.yaml ]; then
+    read -r -p "Import accounts (from accounts.yaml)? [y/N] " response
+    response=${response,,}
+    if [[ $response =~ ^(yes|y| ) ]]; then
+        echo "Importing accounts."
+        myhttp -b -f POST "$api_url/users/accounts" yaml@accounts.yaml
+    else
+        echo "Skipping accounts import."
+    fi
+elif [ -r accounts.tsv ]; then
+    read -r -p "Import accounts (from accounts.tsv)? [y/N] " response
+    response=${response,,}
+    if [[ $response =~ ^(yes|y| ) ]]; then
+        echo "Importing accounts."
+        myhttp -b -f POST "$api_url/users/accounts" tsv@accounts.tsv
+    else
+        echo "Skipping accounts import."
+    fi
+else
+    echo "Neither 'accounts.json', 'accounts.yaml' nor 'groups.tsv' found, skipping accounts import."
+fi
 if [ -r accounts.tsv ]; then
     read -r -p "Import accounts (from accounts.tsv)? [Y/n] " response
     response=${response,,}
@@ -159,7 +194,7 @@ if [ -r problems.yaml ] || [ -r problems.json ] || [ -r problemset.yaml ]; then
             read -r -p "Please specify the contest id: " cid
         fi
         if [ -r problems.yaml ]; then
-            probs=$(grep -oP "(?<=id:\s)[',\"]?[[:alnum:]]*[',\"]?(?=,|$)" problems.yaml)
+            probs=$(grep -oP "(?<=id:\s)\s*[',\"]?[[:alnum:]]*[',\"]?(?=,|$)" problems.yaml)
         elif [ -r problems.json ]; then
             probs=$(jq -r '.[].id' < problems.json)
         else

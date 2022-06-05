@@ -12,7 +12,6 @@ use App\Service\ImportExportService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
 use OpenApi\Annotations as OA;
@@ -32,10 +31,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
  */
 class UserController extends AbstractRestController
 {
-    /**
-     * @var ImportExportService
-     */
-    protected $importExportService;
+    protected ImportExportService $importExportService;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -77,7 +73,6 @@ class UserController extends AbstractRestController
      *     response="200",
      *     description="Returns a (currently meaningless) status message.",
      * )
-     * @throws Exception
      */
     public function addGroupsAction(Request $request): string
     {
@@ -125,9 +120,8 @@ class UserController extends AbstractRestController
      *     response="200",
      *     description="Returns a (currently meaningless) status message.",
      * )
-     * @throws Exception
      */
-    public function addOrganizationsAction(Request $request) : string
+    public function addOrganizationsAction(Request $request): string
     {
         /** @var UploadedFile $jsonFile */
         $jsonFile = $request->files->get('json') ?: [];
@@ -169,7 +163,6 @@ class UserController extends AbstractRestController
      *     response="200",
      *     description="Returns a (currently meaningless) status message.",
      * )
-     * @throws Exception
      */
     public function addTeamsAction(Request $request): string
     {
@@ -202,12 +195,23 @@ class UserController extends AbstractRestController
      *     @OA\MediaType(
      *         mediaType="multipart/form-data",
      *         @OA\Schema(
-     *             required={"tsv"},
      *             @OA\Property(
      *                 property="tsv",
      *                 type="string",
      *                 format="binary",
      *                 description="The accounts.tsv files to import."
+     *             ),
+     *             @OA\Property(
+     *                 property="json",
+     *                 type="string",
+     *                 format="binary",
+     *                 description="The accounts.json files to import."
+     *             ),
+     *             @OA\Property(
+     *                 property="yaml",
+     *                 type="string",
+     *                 format="binary",
+     *                 description="The accounts.yaml files to import."
      *             )
      *         )
      *     )
@@ -216,23 +220,41 @@ class UserController extends AbstractRestController
      *     response="200",
      *     description="Returns a (currently meaningless) status message.",
      * )
+     *
      * @throws BadRequestHttpException
      */
     public function addAccountsAction(Request $request): string
     {
         /** @var UploadedFile $tsvFile */
         $tsvFile = $request->files->get('tsv') ?: [];
-        $ret = $this->importExportService->importTsv('accounts', $tsvFile, $message);
-        if ($ret >= 0) {
-            // TODO: better return all teams here?
-            return "$ret new account(s) added successfully.";
+        /** @var UploadedFile $jsonFile */
+        $jsonFile = $request->files->get('json') ?: [];
+        /** @var UploadedFile $yamlFile */
+        $yamlFile      = $request->files->get('yaml') ?: [];
+        $providedFiles = array_filter([$tsvFile, $jsonFile, $yamlFile]);
+        if (count($providedFiles) !== 1) {
+            throw new BadRequestHttpException('Supply exactly one of \'json\', \'yaml\' or \'tsv\'');
+        }
+
+        // Treat the YAML as JSON, since we can parse both.
+        if ($yamlFile) {
+            $jsonFile = $yamlFile;
+        }
+
+        $message = null;
+        if ($tsvFile && ($result = $this->importExportService->importTsv('accounts', $tsvFile, $message))) {
+            // TODO: better return all accounts here?
+            return "$result new account(s) successfully added.";
+        } elseif ($jsonFile && ($result = $this->importExportService->importJson('accounts', $jsonFile, $message))) {
+            // TODO: better return all accounts here?
+            return "$result new account(s) successfully added.";
         } else {
             throw new BadRequestHttpException("Error while adding accounts: $message");
         }
     }
 
     /**
-     * Get all the users
+     * Get all the users.
      * @Rest\Get("")
      * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
      * @OA\Response(
@@ -258,7 +280,7 @@ class UserController extends AbstractRestController
     }
 
     /**
-     * Get the given user
+     * Get the given user.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
      * @Security("is_granted('ROLE_ADMIN') or is_granted('ROLE_API_READER')")
@@ -275,7 +297,7 @@ class UserController extends AbstractRestController
     }
 
     /**
-     * Add a new user
+     * Add a new user.
      *
      * @Rest\Post()
      * @IsGranted("ROLE_API_WRITER")
@@ -332,7 +354,7 @@ class UserController extends AbstractRestController
                 ->select('t')
                 ->andWhere(sprintf('t.%s = :team',
                     $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid'))
-                ->setParameter(':team', $request->request->get('team_id'))
+                ->setParameter('team', $request->request->get('team_id'))
                 ->getQuery()
                 ->getOneOrNullResult();
 
@@ -367,17 +389,14 @@ class UserController extends AbstractRestController
         if ($request->query->has('team')) {
             $queryBuilder
                 ->andWhere('u.team = :team')
-                ->setParameter(':team', $request->query->get('team'));
+                ->setParameter('team', $request->query->get('team'));
         }
 
         return $queryBuilder;
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
-        return 'u.userid';
+        return sprintf('u.%s', $this->eventLogService->externalIdFieldForEntity(User::class) ?? 'userid');
     }
 }

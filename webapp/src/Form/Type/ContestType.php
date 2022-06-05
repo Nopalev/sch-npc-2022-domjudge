@@ -5,7 +5,6 @@ namespace App\Form\Type;
 use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Team;
-use App\Entity\TeamAffiliation;
 use App\Entity\TeamCategory;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
@@ -24,10 +23,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 
 class ContestType extends AbstractExternalIdEntityType
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
+    protected DOMJudgeService $dj;
 
     public function __construct(EventLogService $eventLogService, DOMJudgeService $dj)
     {
@@ -35,12 +31,7 @@ class ContestType extends AbstractExternalIdEntityType
         $this->dj = $dj;
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     * @throws \Exception
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $this->addExternalIdField($builder, Contest::class);
         $builder->add('shortname', TextType::class, [
@@ -106,9 +97,7 @@ class ContestType extends AbstractExternalIdEntityType
             'required' => false,
             'class' => TeamCategory::class,
             'multiple' => true,
-            'choice_label' => function (TeamCategory $category) {
-                return $category->getName();
-            },
+            'choice_label' => fn(TeamCategory $category) => $category->getName(),
             'help' => 'List of team categories that will receive medals for this contest.',
         ]);
         foreach (['gold', 'silver', 'bronze'] as $medalType) {
@@ -143,18 +132,14 @@ class ContestType extends AbstractExternalIdEntityType
             'required' => false,
             'class' => Team::class,
             'multiple' => true,
-            'choice_label' => function (Team $team) {
-                return sprintf('%s (t%d)', $team->getEffectiveName(), $team->getTeamid());
-            },
+            'choice_label' => fn(Team $team) => sprintf('%s (t%d)', $team->getEffectiveName(), $team->getTeamid()),
             'help' => 'List of teams participating in the contest, in case it is not open to all teams.',
         ]);
         $builder->add('teamCategories', EntityType::class, [
             'required' => false,
             'class' => TeamCategory::class,
             'multiple' => true,
-            'choice_label' => function (TeamCategory $category) {
-                return $category->getName();
-            },
+            'choice_label' => fn(TeamCategory $category) => $category->getName(),
             'help' => 'List of team categories participating in the contest, in case it is not open to all teams.',
         ]);
         $builder->add('enabled', ChoiceType::class, [
@@ -199,7 +184,7 @@ class ContestType extends AbstractExternalIdEntityType
         });
     }
 
-    public function configureOptions(OptionsResolver $resolver)
+    public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults(['data_class' => Contest::class]);
     }

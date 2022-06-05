@@ -22,7 +22,8 @@ Prepare a file called ``groups.json`` which contains the team categories.
 It should be a JSON array with objects, each object should contain the following
 fields:
 
-- ``id``: the (integer) category ID to use. Must be unique
+- ``id``: the category ID to use. Must be unique
+- ``icpc_id`` (optional): an external ID, e.g. from the ICPC CMS, may be empty
 - ``name``: the name of the team category as shown on the scoreboard
 - ``hidden`` (defaults to ``false``): if ``true``, teams in this category will
   not be shown on the scoreboard
@@ -33,6 +34,7 @@ Example ``groups.json``::
 
   [{
     "id": "13337",
+    "icpc_id": "123",
     "name": "Companies",
     "hidden": true
   }, {
@@ -44,7 +46,7 @@ Example ``groups.json``::
   }]
 
 To import the file using the jury interface, go to `Import / export`, select
-`groups` under `JSON import`, select your file and click `Import`.
+`groups` under `Import JSON / YAML`, select your file and click `Import`.
 
 To import the file using the API run the following command::
 
@@ -57,7 +59,7 @@ Prepare a file called ``groups.tsv`` which contains the team categories.
 The first line should contain ``File_Version 1`` (tab-separated).
 Each of the following lines must contain the following elements separated by tabs:
 
-- the (integer) )category ID. Must be unique
+- the category ID. Must be unique
 - the name of the team category as shown on the scoreboard
 
 Example ``groups.tsv``::
@@ -86,6 +88,7 @@ It should be a JSON array with objects, each object should contain the following
 fields:
 
 - ``id``: the external affiliation ID. Must be unique
+- ``icpc_id`` (optional): an external ID, e.g. from the ICPC CMS, may be empty
 - ``name``: the affiliation short name as used in the jury interface and certain
   exports
 - ``formal_name``: the affiliation name as used on the scoreboard
@@ -95,18 +98,20 @@ Example ``organizations.json``::
 
   [{
     "id": "INST-42",
+    "icpc_id": "42",
     "name": "LU",
     "formal_name": "Lund University",
     "country": "SWE"
   }, {
     "id": "INST-43",
+    "icpc_id": "43",
     "name": "FAU",
     "formal_name": "Friedrich-Alexander-University Erlangen-Nuremberg",
     "country": "DEU"
   }]
 
 To import the file using the jury interface, go to `Import / export`, select
-`organizations` under `JSON import`, select your file and click `Import`.
+`organizations` under `Import JSON / YAML`, select your file and click `Import`.
 
 To import the file using the API run the following command::
 
@@ -124,7 +129,7 @@ Prepare a file called ``teams.json`` which contains the teams.
 It should be a JSON array with objects, each object should contain the following
 fields:
 
-- ``id``: the (integer) team ID. Must be unique
+- ``id``: the team ID. Must be unique
 - ``icpc_id`` (optional): an external ID, e.g. from the ICPC CMS, may be empty
 - ``group_ids``: an array with one element: the category ID this team belongs to
 - ``name``: the team name as used in the web interface
@@ -150,7 +155,7 @@ Example ``teams.json``::
   }]
 
 To import the file using the jury interface, go to `Import / export`, select
-`teams` under `JSON import`, select your file and click `Import`.
+`teams` under `Import JSON / YAML`, select your file and click `Import`.
 
 To import the file using the API run the following command::
 
@@ -163,7 +168,7 @@ Prepare a file called ``teams2.tsv`` which contains the teams.
 The first line should contain ``File_Version	2`` (tab-separated).
 Each of the following lines must contain the following elements separated by tabs:
 
-- the (integer) team ID. Must be unique
+- the team ID. Must be unique
 - an external ID, e.g. from the ICPC CMS, may be empty
 - the category ID this team belongs to
 - the team name as used in the web interface
@@ -189,24 +194,75 @@ To import the file using the API run the following command::
 Importing accounts
 ------------------
 
+There are two formats to import accounts: a YAML format and a legacy TSV format.
+
+Using YAML
+^^^^^^^^^^
+
+Prepare a file called ``accounts.yaml`` which contains the accounts.
+It should be a YAML array with objects, each object should contain the following
+fields:
+
+- ``id``: the account ID. Must be unique
+- ``username``: the account username. Must be unique
+- ``password``: the password to use for the account
+- ``type``: the user type, one of ``team``, ``judge``, ``admin`` or ``balloon``, ``jury`` will be interpret as ``judge``
+- ``team_id``: (optional) the external ID of the team this account belongs to
+- ``name``: (optional) the full name of the account
+- ``ip`` (optional): IP address to link to this account
+
+Example ``accounts.yaml``::
+
+   - id: team001
+     username: team001
+     password: P3xm33imve
+     type: team
+     name: team001
+     ip: 10.10.2.1
+
+   - id: team002
+     username: team002
+     password: qd4WHeJXbd
+     type: team
+     name: team002
+     ip: 10.10.2.2
+
+   - id: john
+     username: john
+     password: Uf4PYRA7mJ
+     type: judge
+     name: John Doe
+
 .. note::
 
-    Importing accounts is currently only possible using a TSV.
+    You can also use a JSON file instead of YAML. Make sure to name it
+    ``accounts.json`` in that case.
+
+To import the file using the jury interface, go to `Import / export`, select
+`accounts` under `Import JSON / YAML`, select your file and click `Import`.
+
+To import the file using the API run the following command::
+
+    http --check-status -b -f POST "<API_URL>/users/accounts" yaml@accounts.yaml
+
+Using the legacy TSV format
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Prepare a file called ``accounts.tsv`` which contains the team credentials.
 The first line should contain ``accounts  1`` (tab-separated).
 Each of the following lines must contain the following elements separated by tabs:
 
-- the user type, one of ``team`` or ``judge``
+- the user type, one of ``team``, ``judge``, ``admin`` or ``balloon``, ``jury`` will be interpret as ``judge``
 - the full name of the user
 - the username
 - the password
+- (optional) the IP address to the user
 
 Example ``accounts.tsv``::
 
    accounts	1
-   team	team001	team001	P3xm33imve
-   team	team002	team002	qd4WHeJXbd
+   team	team001	team001	P3xm33imve	10.10.2.1
+   team	team002	team002	qd4WHeJXbd	10.10.2.2
    judge	John Doe	john	Uf4PYRA7mJ
 
 To import the file using the jury interface, go to `Import / export`, select

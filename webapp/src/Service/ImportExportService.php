@@ -13,55 +13,29 @@ use App\Entity\TeamAffiliation;
 use App\Entity\TeamCategory;
 use App\Entity\User;
 use App\Utils\Scoreboard\Filter;
-use App\Utils\Scoreboard\ScoreboardMatrixItem;
 use App\Utils\Utils;
 use Collator;
 use DateTime;
 use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Id\AssignedGenerator;
-use Doctrine\ORM\Id\IdentityGenerator;
-use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\NonUniqueResultException;
-use Exception;
+use JsonException;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\Validator\ValidatorInterface;
+use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 class ImportExportService
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var ValidatorInterface
-     */
-    protected $validator;
+    protected EntityManagerInterface $em;
+    protected ScoreboardService $scoreboardService;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
+    protected ValidatorInterface $validator;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -80,14 +54,12 @@ class ImportExportService
     }
 
     /**
-     * Get the YAML data for a given contest
-     * @param Contest $contest
+     * Get the YAML data for a given contest.
      * @return array
-     * @throws Exception
      */
-    public function getContestYamlData(Contest $contest)
+    public function getContestYamlData(Contest $contest): array
     {
-        // TODO: it seems we dump contest.yaml and system.yaml and problemset.yaml in one here?
+        // TODO: It seems we dump contest.yaml and system.yaml and problemset.yaml in one here?
 
         $data = [
             'name' => $contest->getName(),
@@ -119,7 +91,7 @@ class ImportExportService
 
         /** @var ContestProblem $contestProblem */
         foreach ($contest->getProblems() as $contestProblem) {
-            // Our color field can be both a HTML color name and an RGB value.
+            // Our color field can be both an HTML color name and an RGB value.
             // If it is in RGB, we try to find the closest HTML color name.
             $color              = $contestProblem->getColor() === null ? null : Utils::convertToColor($contestProblem->getColor());
             $data['problems'][] = [
@@ -173,7 +145,7 @@ class ImportExportService
 
         if (is_string($starttimeValue)) {
             $starttime = date_create_from_format(DateTime::ISO8601, $starttimeValue) ?:
-                // make sure ISO 8601 but with the T replaced with a space also works
+                // Make sure ISO 8601 but with the T replaced with a space also works.
                 date_create_from_format('Y-m-d H:i:sO', $starttimeValue);
         } else {
             /** @var DateTime $starttime */
@@ -294,13 +266,13 @@ class ImportExportService
             }
         }
 
-        // We do not import language details, as there's very little to actually import
+        // We do not import language details, as there's very little to actually import.
 
         if (isset($data['problems'])) {
             $this->importProblemsData($contest, $data['problems']);
         }
 
-        $cid = (string)$contest->getApiId($this->eventLogService);
+        $cid = $contest->getApiId($this->eventLogService);
 
         $this->em->flush();
         return true;
@@ -326,23 +298,22 @@ class ImportExportService
             $contestProblem
                 ->setShortname($problemLabel)
                 ->setColor($problemData['rgb'] ?? $problemData['color'] ?? null)
-                // We need to set both the entities as well as the ID's because of the composite primary key
+                // We need to set both the entities and the IDs because of the composite primary key.
                 ->setProblem($problem)
                 ->setContest($contest);
             $this->em->persist($contestProblem);
 
-            $ids[] = (string)$problem->getApiId($this->eventLogService);
+            $ids[] = $problem->getApiId($this->eventLogService);
         }
 
         $this->em->flush();
 
-        // For now this method will never fail so always return true
+        // For now this method will never fail so always return true.
         return true;
     }
 
     /**
      * Get group data
-     * @return array
      */
     public function getGroupData(): array
     {
@@ -356,7 +327,7 @@ class ImportExportService
 
         $data = [];
         foreach ($categories as $category) {
-            $data[] = [$category->getCategoryid(), $category->getName()];
+            $data[] = [$category->getApiId($this->eventLogService), $category->getName()];
         }
 
         return $data;
@@ -364,7 +335,6 @@ class ImportExportService
 
     /**
      * Get team data
-     * @return array
      */
     public function getTeamData(): array
     {
@@ -380,9 +350,9 @@ class ImportExportService
         $data = [];
         foreach ($teams as $team) {
             $data[] = [
-                $team->getTeamid(),
+                $team->getApiId($this->eventLogService),
                 $team->getIcpcid(),
-                $team->getCategory()->getCategoryid(),
+                $team->getCategory()->getApiId($this->eventLogService),
                 $team->getEffectiveName(),
                 $team->getAffiliation() ? $team->getAffiliation()->getName() : '',
                 $team->getAffiliation() ? $team->getAffiliation()->getShortname() : '',
@@ -395,16 +365,13 @@ class ImportExportService
     }
 
     /**
-     * Get results data for the given sortorder
-     * @param int $sortOrder
-     * @return array
-     * @throws Exception
+     * Get results data for the given sortorder.
      */
-    public function getResultsData(int $sortOrder)
+    public function getResultsData(int $sortOrder): array
     {
-        // we'll here assume that the requested file will be of the current contest,
-        // as all our scoreboard interfaces do
-        // 1    External ID     24314   integer
+        // We'll here assume that the requested file will be of the current contest,
+        // as all our scoreboard interfaces do:
+        // 1    External ID     24314   string
         // 2    Rank in contest     1   integer
         // 3    Award   Gold Medal  string
         // 4    Number of problems the team has solved  4   integer
@@ -444,7 +411,7 @@ class ImportExportService
             ->getResult();
 
         $numberOfTeams = count($scoreboard->getScores());
-        // determine number of problems solved by median team
+        // Determine number of problems solved by median team.
         $count  = 0;
         $median = 0;
         foreach ($scoreboard->getScores() as $teamScore) {
@@ -464,7 +431,6 @@ class ImportExportService
                 continue;
             }
             $maxTime = -1;
-            /** @var ScoreboardMatrixItem $matrixItem */
             foreach ($scoreboard->getMatrix()[$teamScore->team->getTeamid()] as $matrixItem) {
                 $time    = Utils::scoretime($matrixItem->time, $scoreIsInSeconds);
                 $maxTime = max($maxTime, $time);
@@ -472,14 +438,14 @@ class ImportExportService
 
             $rank      = $teamScore->rank;
             $numPoints = $teamScore->numPoints;
-            if ($rank <= 4) {
+            if ($rank <= ($contest->getGoldMedals() ?? 4)) {
                 $awardString = 'Gold Medal';
-            } elseif ($rank <= 8) {
+            } elseif ($rank <= ($contest->getGoldMedals() ?? 4) + ($contest->getSilverMedals() ?? 4)) {
                 $awardString = 'Silver Medal';
-            } elseif ($rank <= 12 + $contest->getB()) {
+            } elseif ($rank <= ($contest->getGoldMedals() ?? 4) + ($contest->getSilverMedals() ?? 4) + ($contest->getBronzeMedals() ?? 4) + $contest->getB()) {
                 $awardString = 'Bronze Medal';
             } elseif ($numPoints >= $median) {
-                // teams with equally solved number of problems get the same rank
+                // Teams with equally solved number of problems get the same rank.
                 if (!isset($ranks[$numPoints])) {
                     $ranks[$numPoints] = $rank;
                 }
@@ -508,10 +474,10 @@ class ImportExportService
             ];
         }
 
-        // sort by rank/name
+        // Sort by rank/name.
         uasort($data, function ($a, $b) use ($teams) {
             if ($a[1] != $b[1]) {
-                // Honorable mention has no rank
+                // Honorable mention has no rank.
                 if ($a[1] === '') {
                     return 1;
                 } elseif ($b[1] === '') {
@@ -539,18 +505,13 @@ class ImportExportService
     }
 
     /**
-     * Import a TSV file
-     * @param string       $type
-     * @param UploadedFile $file
-     * @param string|null  $message
-     * @return int
-     * @throws Exception
+     * Import a TSV file.
      */
-    public function importTsv(string $type, UploadedFile $file, string &$message = null): int
+    public function importTsv(string $type, UploadedFile $file, ?string &$message = null): int
     {
         $content = file($file->getRealPath());
         // The first line of the tsv is always the format with a version number.
-        // currently we hardcode version 1 because there are no others
+        // Currently, we hardcode version 1 because there are no others.
         $version = rtrim(array_shift($content));
         // Two variants are in use: one where the first token is a static string
         // "File_Version" and the second where it's the type, e.g. "groups".
@@ -560,7 +521,7 @@ class ImportExportService
         }
         $regex = sprintf("/^(File_Version|%s)\t%s$/i", $type, $versionMatch);
         if (!preg_match($regex, $version)) {
-            $message = sprintf("Unknown format or version: %s != %s", $version, $versionMatch);
+            $message = sprintf("TSV has unknown format or version: %s != %s", $version, $versionMatch);
             return -1;
         }
 
@@ -579,20 +540,22 @@ class ImportExportService
 
     /**
      * Import a JSON file
-     * @param string       $type
-     * @param UploadedFile $file
-     * @param string|null  $message
-     * @return int
-     * @throws Exception
      */
-    public function importJson(string $type, UploadedFile $file, string &$message = null): int
+    public function importJson(string $type, UploadedFile $file, ?string &$message = null): int
     {
         $content = file_get_contents($file->getRealPath());
-        $data = json_decode($content, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $message = 'File contents is not valid JSON: ' . json_last_error_msg();
-            return -1;
+        try {
+            $data = $this->dj->jsonDecode($content);
+        } catch (JsonException $e) {
+            // Check if we can parse it as YAML
+            try {
+                $data = Yaml::parse($content, Yaml::PARSE_DATETIME);
+            } catch (ParseException $e) {
+                $message = "File contents is not valid JSON or YAML: " . $e->getMessage();
+                return -1;
+            }
         }
+
         if (!is_array($data) || !is_int(key($data))) {
             $message = 'File contents does not contain JSON array';
             return -1;
@@ -605,6 +568,8 @@ class ImportExportService
                 return $this->importOrganizationsJson($data, $message);
             case 'teams':
                 return $this->importTeamsJson($data, $message);
+            case 'accounts':
+                return $this->importAccountsJson($data, $message);
             default:
                 $message = sprintf('Invalid import type %s', $type);
                 return -1;
@@ -612,13 +577,9 @@ class ImportExportService
     }
 
     /**
-     * Import groups TSV
-     * @param array       $content
-     * @param string|null $message
-     * @return int
-     * @throws Exception
+     * Import groups TSV.
      */
-    protected function importGroupsTsv(array $content, string &$message = null): int
+    protected function importGroupsTsv(array $content, ?string &$message = null): int
     {
         $groupData = [];
         $l         = 1;
@@ -641,14 +602,9 @@ class ImportExportService
     /**
      * Import groups JSON
      *
-     * @param array               $data
-     * @param string|null         $message
      * @param TeamCategory[]|null $saved The saved groups
-     *
-     * @return int
-     * @throws Exception
      */
-    public function importGroupsJson(array $data, string &$message = null, array &$saved = null): int
+    public function importGroupsJson(array $data, ?string &$message = null, ?array &$saved = null): int
     {
         $groupData = [];
         foreach ($data as $idx => $group) {
@@ -658,6 +614,7 @@ class ImportExportService
             }
             $groupData[] = [
                 'categoryid' => @$group['id'],
+                'icpc_id' => @$group['icpc_id'],
                 'name' => @$group['name'],
                 'visible' => !($group['hidden'] ?? false),
                 'sortorder' => @$group['sortorder'],
@@ -671,34 +628,28 @@ class ImportExportService
     /**
      * Import group data from the given array
      *
-     * @param array $groupData
      * @param TeamCategory[]|null $saved The saved groups
-     *
-     * @return int
      *
      * @throws NonUniqueResultException
      */
-    protected function importGroupData(array $groupData, array &$saved = null): int
+    protected function importGroupData(array $groupData, ?array &$saved = null): int
     {
-        // We want to overwrite the ID so change the ID generator
+        // We want to overwrite the ID so change the ID generator.
         $metadata = $this->em->getClassMetaData(TeamCategory::class);
 
         foreach ($groupData as $groupItem) {
             if (empty($groupItem['categoryid'])) {
                 $categoryId = null;
                 $teamCategory = null;
-                $metadata->setIdGeneratorType(ClassMetadata::GENERATOR_TYPE_IDENTITY);
-                $metadata->setIdGenerator(new IdentityGenerator());
             } else {
-                $categoryId = (int)$groupItem['categoryid'];
-                $teamCategory = $this->em->getRepository(TeamCategory::class)->find($categoryId);
-                $metadata->setIdGeneratorType(ClassMetadata::GENERATOR_TYPE_NONE);
-                $metadata->setIdGenerator(new AssignedGenerator());
+                $categoryId = $groupItem['categoryid'];
+                $field = $this->eventLogService->apiIdFieldForEntity(TeamCategory::class);
+                $teamCategory = $this->em->getRepository(TeamCategory::class)->findOneBy([$field => $categoryId]);
             }
             if (!$teamCategory) {
                 $teamCategory = new TeamCategory();
                 if ($categoryId !== null) {
-                    $teamCategory->setCategoryid($categoryId);
+                    $teamCategory->setExternalid($categoryId);
                 }
                 $this->em->persist($teamCategory);
                 $action = EventLogService::ACTION_CREATE;
@@ -709,7 +660,8 @@ class ImportExportService
                 ->setName($groupItem['name'])
                 ->setVisible($groupItem['visible'] ?? true)
                 ->setSortorder($groupItem['sortorder'] ?? 0)
-                ->setColor($groupItem['color'] ?? null);
+                ->setColor($groupItem['color'] ?? null)
+                ->setIcpcid($groupItem['icpc_id'] ?? null);
             $this->em->flush();
             if ($contest = $this->dj->getCurrentContest()) {
                 $this->eventLogService->log('team_category', $teamCategory->getCategoryid(), $action,
@@ -726,16 +678,11 @@ class ImportExportService
     }
 
     /**
-     * Import organizations JSON
+     * Import organizations JSON.
      *
-     * @param array                  $data
-     * @param string|null            $message
      * @param TeamAffiliation[]|null $saved The saved groups
-     *
-     * @return int
-     * @throws Exception
      */
-    public function importOrganizationsJson(array $data, string &$message = null, array &$saved = null): int
+    public function importOrganizationsJson(array $data, ?string &$message = null, ?array &$saved = null): int
     {
         $organizationData = [];
         foreach ($data as $idx => $organization) {
@@ -744,6 +691,7 @@ class ImportExportService
                 'shortname' => @$organization['name'],
                 'name' => @$organization['formal_name'],
                 'country' => @$organization['country'],
+                'icpc_id' => $organization['icpc_id'] ?? null,
             ];
         }
 
@@ -751,16 +699,13 @@ class ImportExportService
     }
 
     /**
-     * Import organization data from the given array
+     * Import organization data from the given array.
      *
-     * @param array                  $organizationData
      * @param TeamAffiliation[]|null $saved The saved groups
-     *
-     * @return int
      *
      * @throws NonUniqueResultException
      */
-    protected function importOrganizationData(array $organizationData, array &$saved = null): int
+    protected function importOrganizationData(array $organizationData, ?array &$saved = null): int
     {
         foreach ($organizationData as $organizationItem) {
             $externalId      = $organizationItem['externalid'];
@@ -779,7 +724,8 @@ class ImportExportService
             $teamAffiliation
                 ->setShortname($organizationItem['shortname'])
                 ->setName($organizationItem['name'])
-                ->setCountry($organizationItem['country']);
+                ->setCountry($organizationItem['country'])
+                ->setIcpcid($organizationItem['icpc_id'] ?? null);
             $this->em->flush();
             if ($contest = $this->dj->getCurrentContest()) {
                 $this->eventLogService->log('team_affiliation', $teamAffiliation->getAffilid(), $action,
@@ -797,12 +743,9 @@ class ImportExportService
 
     /**
      * Import teams TSV
-     * @param array       $content
-     * @param string|null $message
-     * @return int
      * @throws NonUniqueResultException
      */
-    protected function importTeamsTsv(array $content, string &$message = null): int
+    protected function importTeamsTsv(array $content, ?string &$message = null): int
     {
         $teamData = [];
         $l        = 1;
@@ -811,11 +754,11 @@ class ImportExportService
             $line = Utils::parseTsvLine(trim($line));
 
             // teams.tsv contains data pertaining both to affiliations and teams.
-            // hence return data for both tables.
+            // Hence, return data for both tables.
 
-            // we may do more integrity/format checking of the data here.
+            // We may do more integrity/format checking of the data here.
 
-            // Set ICPC  ID's to null if they are not given
+            // Set ICPC IDs to null if they are not given.
             $teamIcpcId = @$line[1];
             if (empty($teamIcpcId)) {
                 $teamIcpcId = null;
@@ -828,7 +771,7 @@ class ImportExportService
                 $affiliationExternalid = null;
             }
 
-            // Set team ID to ICPC ID if it has the literal value 'null' and the ICPC ID is numeric
+            // Set team ID to ICPC ID if it has the literal value 'null' and the ICPC ID is numeric.
             $teamId = @$line[0];
             if ($teamId === 'null' && is_numeric($teamIcpcId)) {
                 $teamId = (int)$teamIcpcId;
@@ -853,16 +796,11 @@ class ImportExportService
     }
 
     /**
-     * Import teams JSON
+     * Import teams JSON.
      *
-     * @param array       $data
-     * @param string|null $message
      * @param Team[]|null $saved The saved teams
-     *
-     * @return int
-     * @throws Exception
      */
-    public function importTeamsJson(array $data, string &$message = null, array &$saved = null): int
+    public function importTeamsJson(array $data, ?string &$message = null, ?array &$saved = null): int
     {
         $teamData = [];
         foreach ($data as $idx => $team) {
@@ -873,7 +811,7 @@ class ImportExportService
                     'categoryid' => $team['group_ids'][0] ?? null,
                     'name' => @$team['name'],
                     'display_name' => @$team['display_name'],
-                    'members' => @$team['members'],
+                    'publicdescription' => @$team['members'],
                 ],
                 'team_affiliation' => [
                     'externalid' => $team['organization_id'] ?? null,
@@ -885,27 +823,93 @@ class ImportExportService
     }
 
     /**
-     * Import team data from the given array
+     * Import accounts JSON.
      *
-     * @param array       $teamData
+     * @param User[]|null $saved The saved users
+     */
+    public function importAccountsJson(array $data, ?string &$message = null, ?array &$saved = null): int
+    {
+        $teamRole     = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'team']);
+        $juryRole     = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'jury']);
+        $adminRole    = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'admin']);
+        $balloonRole  = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'balloon']);
+        $juryCategory = $this->em->getRepository(TeamCategory::class)->findOneBy(['name' => 'Jury']);
+        if (!$juryCategory) {
+            $juryCategory = new TeamCategory();
+            $juryCategory
+                ->setName('Jury')
+                ->setSortorder(100)
+                ->setVisible(false)
+                ->setExternalid('jury');
+            $this->em->persist($juryCategory);
+            $this->em->flush();
+        }
+        $accountData = [];
+        foreach ($data as $idx => $account) {
+            $juryTeam = null;
+            $roles    = [];
+            switch ($account['type']) {
+                case 'admin':
+                    $roles[] = $adminRole;
+                    // Don't break so we can also add the jury features
+                case 'jury': // We don't break to let non existing role jury be interpret as role judge
+                case 'judge':
+                    if ($account['type'] !== 'admin') {
+                        $roles[] = $juryRole;
+                    }
+                    $roles[]  = $teamRole;
+                    $juryTeam = [
+                        'name'              => $account['name'] ?? $account['username'],
+                        'externalid'        => $account['externalid'] ?? $account['username'],
+                        'category'          => $juryCategory,
+                        'publicdescription' => $account['name'] ?? $account['username'],
+                    ];
+                    break;
+                case 'team':
+                    $roles[] = $teamRole;
+                    break;
+                case 'balloon':
+                    $roles[] = $balloonRole;
+                    break;
+                case 'analyst':
+                case 'staff':
+                    // Ignore type analyst and staff for now. We don't have a useful mapping yet.
+                    continue 2;
+                default:
+                    $message = sprintf('unknown role on index %d: %s', $idx, $account['type']);
+                    return -1;
+            }
+            $accountData[] = [
+                'user' => [
+                    'name'           => $account['name'] ?? null,
+                    'externalid'     => $account['id'] ?? $account['username'],
+                    'username'       => $account['username'],
+                    'plain_password' => $account['password'],
+                    'teamid'         => $account['team_id'] ?? null,
+                    'user_roles'     => $roles,
+                    'ip_address'     => $account['ip'] ?? null,
+                ],
+                'team' => $juryTeam,
+            ];
+        }
+
+        return $this->importAccountData($accountData, $saved);
+    }
+
+    /**
+     * Import team data from the given array.
+     *
      * @param Team[]|null $saved The saved teams
-     *
-     * @return int
      *
      * @throws NonUniqueResultException
      */
-    protected function importTeamData(array $teamData, array &$saved = null): int
+    protected function importTeamData(array $teamData, ?array &$saved = null): int
     {
-        // We want to overwrite the ID so change the ID generator
-        $metadata = $this->em->getClassMetaData(TeamCategory::class);
-        $metadata->setIdGeneratorType(ClassMetadata::GENERATOR_TYPE_NONE);
-        $metadata->setIdGenerator(new AssignedGenerator());
-
         $createdAffiliations = [];
         $createdTeams        = [];
         $updatedTeams        = [];
         foreach ($teamData as $teamItem) {
-            // it is legitimate that a team has no affiliation. Do not add it then.
+            // It is legitimate that a team has no affiliation. Do not add it then.
             $teamAffiliation = null;
             $teamCategory    = null;
             if (!empty($teamItem['team_affiliation']['shortname'])) {
@@ -941,11 +945,12 @@ class ImportExportService
             unset($teamItem['team']['affilid']);
 
             if (!empty($teamItem['team']['categoryid'])) {
-                $teamCategory = $this->em->getRepository(TeamCategory::class)->find($teamItem['team']['categoryid']);
+                $field = $this->eventLogService->apiIdFieldForEntity(TeamCategory::class);
+                $teamCategory = $this->em->getRepository(TeamCategory::class)->findOneBy([$field => $teamItem['team']['categoryid']]);
                 if (!$teamCategory) {
                     $teamCategory = new TeamCategory();
                     $teamCategory
-                        ->setCategoryid((int)$teamItem['team']['categoryid'])
+                        ->setExternalid($teamItem['team']['categoryid'])
                         ->setName($teamItem['team']['categoryid'] . ' - auto-create during import');
                     $this->em->persist($teamCategory);
                     $this->dj->auditlog('team_category', $teamCategory->getCategoryid(),
@@ -960,18 +965,20 @@ class ImportExportService
             // Determine if we need to set the team ID manually or automatically
             if (empty($teamItem['team']['teamid'])) {
                 $team = null;
-                $metadata->setIdGeneratorType(ClassMetadata::GENERATOR_TYPE_IDENTITY);
-                $metadata->setIdGenerator(new IdentityGenerator());
             } else {
-                $team = $this->em->getRepository(Team::class)->find($teamItem['team']['teamid']);
-                $metadata->setIdGeneratorType(ClassMetadata::GENERATOR_TYPE_NONE);
-                $metadata->setIdGenerator(new AssignedGenerator());
+                $field = $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid';
+                $team = $this->em->getRepository(Team::class)->findOneBy([$field => $teamItem['team']['teamid']]);
             }
             if (!$team) {
                 $team  = new Team();
                 $added = true;
             } else {
                 $added = false;
+            }
+
+            if (!empty($teamItem['team']['teamid'])) {
+                $team->setExternalid($teamItem['team']['teamid']);
+                unset($teamItem['team']['teamid']);
             }
 
             $propertyAccessor = PropertyAccess::createPropertyAccessor();
@@ -1013,19 +1020,125 @@ class ImportExportService
     }
 
     /**
-     * Import accounts TSV
-     * @param array       $content
-     * @param string|null $message
-     * @return int
-     * @throws Exception
+     * Import account data from the given array.
+     *
+     * @param User[]|null $saved The saved users
+     *
+     * @throws NonUniqueResultException
      */
-    protected function importAccountsTsv(array $content, string &$message = null): int
+    protected function importAccountData(array $accountData, ?array &$saved = null): int
+    {
+        $createdUsers = [];
+        $updatedUsers = [];
+        $newTeams     = [];
+        foreach ($accountData as $accountItem) {
+            if (!empty($accountItem['team'])) {
+                $team = $this->em->getRepository(Team::class)->findOneBy([
+                    'name' => $accountItem['team']['name'],
+                    'category' => $accountItem['team']['category']
+                ]);
+                if ($team === null) {
+                    $team = new Team();
+                    $team
+                        ->setName($accountItem['team']['name'])
+                        ->setCategory($accountItem['team']['category'])
+                        ->setExternalid($accountItem['team']['externalid'])
+                        ->setPublicDescription($accountItem['team']['publicdescription'] ?? null);
+                    $this->em->persist($team);
+                    $action = EventLogService::ACTION_CREATE;
+                } else {
+                    $action = EventLogService::ACTION_UPDATE;
+                }
+                $this->em->flush();
+                $newTeams[] = [
+                    'team' => $team,
+                    'action' => $action,
+                ];
+                $this->dj->auditlog('team', $team->getTeamid(), 'replaced',
+                    'imported from tsv, autocreated for judge');
+                $accountItem['user']['team'] = $team;
+                unset($accountItem['user']['teamid']);
+            }
+
+            $user = $this->em->getRepository(User::class)->findOneBy(['username' => $accountItem['user']['username']]);
+            if (!$user) {
+                $user  = new User();
+                $added = true;
+            } else {
+                $added = false;
+            }
+
+            if (array_key_exists('teamid', $accountItem['user'])) {
+                $teamId = $accountItem['user']['teamid'];
+                unset($accountItem['user']['teamid']);
+                $team = null;
+                if ($teamId !== null) {
+                    $field = $this->eventLogService->apiIdFieldForEntity(Team::class);
+                    $team  = $this->em->getRepository(Team::class)->findOneBy([$field => $teamId]);
+                    if (!$team) {
+                        $team = new Team();
+                        $team
+                            ->setExternalid($teamId)
+                            ->setName($teamId . ' - auto-create during import');
+                        $this->em->persist($team);
+                        $this->dj->auditlog('team', $team->getTeamid(),
+                            'added', 'imported from tsv');
+                    }
+                }
+                $accountItem['user']['team'] = $team;
+            }
+
+            $propertyAccessor = PropertyAccess::createPropertyAccessor();
+            foreach ($accountItem['user'] as $field => $value) {
+                $propertyAccessor->setValue($user, $field, $value);
+            }
+
+            if ($added) {
+                $this->em->persist($user);
+            }
+            $this->em->flush();
+            if ($added) {
+                $createdUsers[] = $user->getUserid();
+            } else {
+                $updatedUsers[] = $user->getUserid();
+            }
+
+            if ($saved !== null) {
+                $saved[] = $user;
+            }
+
+            $this->dj->auditlog('user', $user->getUserid(), 'replaced', 'imported from tsv');
+        }
+
+        if ($contest = $this->dj->getCurrentContest()) {
+            foreach ($newTeams as $newTeam) {
+                $team = $newTeam['team'];
+                $action = $newTeam['action'];
+                $this->eventLogService->log('team', $team->getTeamid(), $action, $contest->getCid());
+            }
+
+            if (!empty($createdUsers)) {
+                $this->eventLogService->log('user', $createdUsers, 'create', $contest->getCid());
+            }
+            if (!empty($updatedUsers)) {
+                $this->eventLogService->log('user', $updatedUsers, 'update', $contest->getCid());
+            }
+        }
+
+        return count($accountData);
+    }
+
+    /**
+     * Import accounts TSV
+     */
+    protected function importAccountsTsv(array $content, ?string &$message = null): int
     {
         $accountData = [];
         $l           = 1;
         $teamRole    = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'team']);
         $juryRole    = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'jury']);
         $adminRole   = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'admin']);
+        $balloonRole  = $this->em->getRepository(Role::class)->findOneBy(['dj_role' => 'balloon']);
 
         $juryCategory = $this->em->getRepository(TeamCategory::class)->findOneBy(['name' => 'Jury']);
         if (!$juryCategory) {
@@ -1033,7 +1146,8 @@ class ImportExportService
             $juryCategory
                 ->setName('Jury')
                 ->setSortorder(100)
-                ->setVisible(false);
+                ->setVisible(false)
+                ->setExternalid('jury');
             $this->em->persist($juryCategory);
             $this->em->flush();
         }
@@ -1047,15 +1161,18 @@ class ImportExportService
             switch ($line[0]) {
                 case 'admin':
                     $roles[] = $adminRole;
-                    break;
+                    // Don't break so we can also add the jury features
+                case 'jury': // We don't break to let non existing role jury be interpret as role judge
                 case 'judge':
-                    $roles[]  = $juryRole;
+                    if ($line[0] !== 'admin') {
+                        $roles[] = $juryRole;
+                    }
                     $roles[]  = $teamRole;
-                    $juryTeam = ['name' => $line[1], 'category' => $juryCategory, 'members' => $line[1]];
+                    $juryTeam = ['name' => $line[1], 'externalid' => $line[2], 'category' => $juryCategory, 'publicdescription' => $line[1]];
                     break;
                 case 'team':
                     $roles[] = $teamRole;
-                    // For now we assume we can find the teamid by parsing
+                    // For now, we assume we can find the teamid by parsing
                     // the username and taking the number in the middle, i.e. we
                     // allow any username in the form "abc" where a and c are arbitrary
                     // strings that contain no numbers and b only contains numbers. The teamid
@@ -1069,11 +1186,15 @@ class ImportExportService
                                            $line[2]);
                         return -1;
                     }
-                    $team = $this->em->getRepository(Team::class)->find($teamId);
+                    $field = $this->eventLogService->externalIdFieldForEntity(Team::class) ?? 'teamid';
+                    $team  = $this->em->getRepository(Team::class)->findOneBy([$field => $teamId]);
                     if ($team === null) {
                         $message = sprintf('unknown team id %s on line %d', $teamId, $l);
                         return -1;
                     }
+                    break;
+                case 'balloon':
+                    $roles[] = $balloonRole;
                     break;
                 case 'analyst':
                     // Ignore type analyst for now. We don't have a useful mapping yet.
@@ -1084,12 +1205,13 @@ class ImportExportService
             }
 
             // accounts.tsv contains data pertaining to users, their roles and
-            // teams. Hence return data for both tables.
+            // teams. Hence, return data for both tables.
 
             // We may do more integrity/format checking of the data here.
             $accountData[] = [
                 'user' => [
                     'name' => $line[1],
+                    'externalid' => $line[2],
                     'username' => $line[2],
                     'plain_password' => $line[3],
                     'team' => $team,
@@ -1100,63 +1222,6 @@ class ImportExportService
             ];
         }
 
-        $newTeams = [];
-        foreach ($accountData as $accountItem) {
-            if (!empty($accountItem['team'])) {
-                $team = $this->em->getRepository(Team::class)->findOneBy([
-                    'name' => $accountItem['team']['name'],
-                    'category' => $accountItem['team']['category']
-                ]);
-                if ($team === null) {
-                    $team = new Team();
-                    $team
-                        ->setName($accountItem['team']['name'])
-                        ->setCategory($accountItem['team']['category'])
-                        ->setMembers($accountItem['team']['members'] ?? null);
-                    $this->em->persist($team);
-                    $action = EventLogService::ACTION_CREATE;
-                } else {
-                    $action = EventLogService::ACTION_UPDATE;
-                }
-                $this->em->flush();
-                $newTeams[] = [
-                    'team' => $team,
-                    'action' => $action,
-                ];
-                $this->dj->auditlog('team', $team->getTeamid(), 'replaced',
-                                    'imported from tsv, autocreated for judge');
-                $accountItem['user']['team'] = $team;
-            }
-
-            $user = $this->em->getRepository(User::class)->findOneBy(['username' => $accountItem['user']['username']]);
-            if (!$user) {
-                $user  = new User();
-                $added = true;
-            } else {
-                $added = false;
-            }
-
-            $propertyAccessor = PropertyAccess::createPropertyAccessor();
-            foreach ($accountItem['user'] as $field => $value) {
-                $propertyAccessor->setValue($user, $field, $value);
-            }
-
-            if ($added) {
-                $this->em->persist($user);
-            }
-            $this->em->flush();
-
-            $this->dj->auditlog('user', $user->getUserid(), 'replaced', 'imported from tsv');
-        }
-
-        if ($contest = $this->dj->getCurrentContest()) {
-            foreach ($newTeams as $newTeam) {
-                $team = $newTeam['team'];
-                $action = $newTeam['action'];
-                $this->eventLogService->log('team', $team->getTeamid(), $action, $contest->getCid());
-            }
-        }
-
-        return count($accountData);
+        return $this->importAccountData($accountData);
     }
 }

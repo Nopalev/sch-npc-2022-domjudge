@@ -7,32 +7,18 @@ use App\Entity\Contest;
 use App\Entity\Judging;
 use App\Entity\ScoreCache;
 use App\Entity\Submission;
-use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
-use Doctrine\ORM\ORMException;
+use Doctrine\ORM\Exception\ORMException;
 use Doctrine\ORM\Query\Expr\Join;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class BalloonService
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
+    protected ConfigurationService $config;
 
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * BalloonService constructor.
-     *
-     * @param EntityManagerInterface $em
-     * @param ConfigurationService   $config
-     */
     public function __construct(
         EntityManagerInterface $em,
         ConfigurationService $config
@@ -46,9 +32,6 @@ class BalloonService
      *
      * This function double checks that the judging is correct and confirmed.
      *
-     * @param Contest      $contest
-     * @param Submission   $submission
-     * @param Judging|null $judging
      * @throws NoResultException
      * @throws NonUniqueResultException
      * @throws ORMException
@@ -56,26 +39,25 @@ class BalloonService
     public function updateBalloons(
         Contest $contest,
         Submission $submission,
-        Judging $judging = null
-    ) : void
-    {
-        // Balloon processing disabled for contest
+        ?Judging $judging = null
+    ): void {
+        // Balloon processing disabled for contest.
         if (!$contest->getProcessBalloons()) {
             return;
         }
 
-        // Make sure judging is correct
+        // Make sure judging is correct.
         if (!$judging || $judging->getResult() !== Judging::RESULT_CORRECT) {
             return;
         }
 
-        // Also make sure it is verified if this is required
+        // Also make sure it is verified if this is required.
         if (!$judging->getVerified() &&
             $this->config->get('verification_required')) {
             return;
         }
 
-        // prevent duplicate balloons in case of multiple correct submissions
+        // Prevent duplicate balloons in case of multiple correct submissions.
         $numCorrect = $this->em->createQueryBuilder()
             ->from(Balloon::class, 'b')
             ->join('b.submission', 's')
@@ -84,9 +66,9 @@ class BalloonService
             ->andWhere('s.problem = :probid')
             ->andWhere('s.team = :teamid')
             ->andWhere('s.contest = :cid')
-            ->setParameter(':probid', $submission->getProblem())
-            ->setParameter(':teamid', $submission->getTeam())
-            ->setParameter(':cid', $submission->getContest())
+            ->setParameter('probid', $submission->getProblem())
+            ->setParameter('teamid', $submission->getTeam())
+            ->setParameter('cid', $submission->getContest())
             ->getQuery()
             ->getSingleScalarResult();
 
@@ -107,7 +89,7 @@ class BalloonService
             $freezetime = $contest->getFreezeTime();
         }
 
-        // Build a list of teams and the problems they solved first
+        // Build a list of teams and the problems they solved first.
         $firstSolved = $em->getRepository(ScoreCache::class)->findBy(['is_first_to_solve' => 1]);
         $firstSolvers = [];
         foreach ($firstSolved as $scoreCache) {
@@ -130,19 +112,19 @@ class BalloonService
             ->leftJoin('t.category', 'c')
             ->leftJoin('t.affiliation', 'a')
             ->andWhere('co.cid = :cid')
-            ->setParameter(':cid', $contest->getCid())
+            ->setParameter('cid', $contest->getCid())
             ->orderBy('b.done', 'ASC')
             ->addOrderBy('s.submittime', 'DESC');
 
         $balloons = $query->getQuery()->getResult();
-        // Loop once over the results to get totals and awards
+        // Loop once over the results to get totals and awards.
         $TOTAL_BALLOONS = $AWARD_BALLOONS = [];
         foreach ($balloons as $balloonsData) {
             if ($balloonsData['color'] === null) {
                 continue;
             }
 
-            $TOTAL_BALLOONS[$balloonsData['teamid']][$balloonsData['probshortname']] = $balloonsData['color'];
+            $TOTAL_BALLOONS[$balloonsData['teamid']][$balloonsData['probshortname']] = $balloonsData[0]->getSubmission()->getContestProblem();
 
             // Keep a list of balloons that were first to solve this problem;
             // can be multiple, one for each sortorder.
@@ -150,18 +132,17 @@ class BalloonService
                 $AWARD_BALLOONS['problem'][$balloonsData['probid']][] = $balloonsData[0]->getBalloonId();
             }
             // Keep overwriting this - in the end it'll
-            // contain the id of the first balloon in this contest.
+            // contain the ID of the first balloon in this contest.
             $AWARD_BALLOONS['contest'] = $balloonsData[0]->getBalloonId();
         }
 
-        // Loop again to construct table
+        // Loop again to construct table.
         $balloons_table = [];
         foreach ($balloons as $balloonsData) {
-            $color = $balloonsData['color'];
-
-            if ($color === null) {
+            if ($balloonsData['color'] === null) {
                 continue;
             }
+            /** @var Balloon $balloon */
             $balloon = $balloonsData[0];
             $done = $balloon->getDone();
 
@@ -180,8 +161,8 @@ class BalloonService
             $balloondata = [];
             $balloondata['balloonid'] = $balloonId;
             $balloondata['time'] = $stime;
-            $balloondata['color'] = $color;
             $balloondata['problem'] = $balloonsData['probshortname'];
+            $balloondata['contestproblem'] = $balloon->getSubmission()->getContestProblem();
             $balloondata['team'] = "t" . $balloonsData['teamid'] . ": " . $balloonsData['teamname'];
             $balloondata['teamid'] = $balloonsData['teamid'];
             $balloondata['location'] = $balloonsData['room'];
@@ -210,7 +191,7 @@ class BalloonService
         return $balloons_table;
     }
 
-    public function setDone(int $balloonId) : void
+    public function setDone(int $balloonId): void
     {
         $em = $this->em;
         $balloon = $em->getRepository(Balloon::class)->find($balloonId);

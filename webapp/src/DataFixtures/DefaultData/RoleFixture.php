@@ -12,20 +12,14 @@ class RoleFixture extends AbstractDefaultDataFixture
     public const JUDGEHOST_REFERENCE = 'judgehost';
     public const TEAM_REFERENCE = 'team';
 
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
+    protected LoggerInterface $logger;
 
     public function __construct(LoggerInterface $logger)
     {
         $this->logger = $logger;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function load(ObjectManager $manager)
+    public function load(ObjectManager $manager): void
     {
         // Mapping from role to description
         $roles = [
@@ -50,9 +44,11 @@ class RoleFixture extends AbstractDefaultDataFixture
                 $this->logger->info('Role %s already exists, not created', [ $roleName ]);
             }
 
-            // Make sure we have a reference to the admin and judgehost roles, since we need them to create the default users
-            // Although the role name and reference have the same value, they are different things: the name is from the role
-            // list while the constant is the reference name. We could rename the constants without breaking anything.
+            // Make sure we have a reference to the admin and judgehost roles, since we need them to create the
+            // default users.
+            // Although the role name and reference have the same value, they are different things: the name is
+            // from the role list while the constant is the reference name. We could rename the constants without
+            // breaking anything.
             if ($roleName === 'admin') {
                 $this->addReference(static::ADMIN_REFERENCE, $role);
             } elseif ($roleName === 'judgehost') {

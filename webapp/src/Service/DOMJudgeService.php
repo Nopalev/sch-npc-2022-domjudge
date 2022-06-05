@@ -6,12 +6,13 @@ use App\Doctrine\DBAL\Types\JudgeTaskType;
 use App\Entity\AssetEntityInterface;
 use App\Entity\AuditLog;
 use App\Entity\Balloon;
-use App\Entity\BaseApiEntity;
 use App\Entity\Clarification;
 use App\Entity\Contest;
 use App\Entity\ContestProblem;
 use App\Entity\Executable;
 use App\Entity\ExecutableFile;
+use App\Entity\ExternalContestSource;
+use App\Entity\ExternalSourceWarning;
 use App\Entity\ImmutableExecutable;
 use App\Entity\InternalError;
 use App\Entity\Judgehost;
@@ -29,7 +30,6 @@ use App\Entity\Testcase;
 use App\Entity\User;
 use App\Utils\FreezeData;
 use App\Utils\Utils;
-use Doctrine\DBAL\FetchMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
@@ -37,6 +37,7 @@ use Doctrine\ORM\Query\Expr\Join;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBagInterface;
 use Symfony\Component\HttpFoundation\Cookie;
+use Symfony\Component\HttpFoundation\InputBag;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
@@ -54,53 +55,17 @@ use ZipArchive;
 
 class DOMJudgeService
 {
-    protected $em;
-    protected $logger;
-
-    /**
-     * @var RequestStack
-     */
-    protected $requestStack;
-
-    /**
-     * @var ParameterBagInterface
-     */
-    protected $params;
-
-    /**
-     * @var AuthorizationCheckerInterface
-     */
-    protected $authorizationChecker;
-
-    /**
-     * @var TokenStorageInterface
-     */
-    protected $tokenStorage;
-
-    /**
-     * @var HttpKernelInterface
-     */
-    protected $httpKernel;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var RouterInterface
-     */
-    protected $router;
-
-    /**
-     * @var Executable|null
-     */
-    protected $defaultCompareExecutable = null;
-
-    /**
-     * @var Executable|null
-     */
-    protected $defaultRunExecutable = null;
+    protected EntityManagerInterface $em;
+    protected LoggerInterface $logger;
+    protected RequestStack $requestStack;
+    protected ParameterBagInterface $params;
+    protected AuthorizationCheckerInterface $authorizationChecker;
+    protected TokenStorageInterface $tokenStorage;
+    protected HttpKernelInterface $httpKernel;
+    protected ConfigurationService $config;
+    protected RouterInterface $router;
+    protected ?Executable $defaultCompareExecutable = null;
+    protected ?Executable $defaultRunExecutable = null;
 
     const DATA_SOURCE_LOCAL = 0;
     const DATA_SOURCE_CONFIGURATION_EXTERNAL = 1;
@@ -108,7 +73,7 @@ class DOMJudgeService
 
     // Regex external identifiers must adhere to. Note that we are not checking whether it
     // does not start with a dot or dash or ends with a dot. We could but it would make the
-    // regex way more complicated and would also complicate the logic in ImportExportService::importContestYaml
+    // regex way more complicated and would also complicate the logic in ImportExportService::importContestYaml.
     const EXTERNAL_IDENTIFIER_REGEX = '/^[a-zA-Z0-9_.-]+$/';
 
     const MIMETYPE_TO_EXTENSION = [
@@ -117,19 +82,6 @@ class DOMJudgeService
         'image/svg+xml' => 'svg',
     ];
 
-    /**
-     * DOMJudgeService constructor.
-     *
-     * @param EntityManagerInterface        $em
-     * @param LoggerInterface               $logger
-     * @param RequestStack                  $requestStack
-     * @param ParameterBagInterface         $params
-     * @param AuthorizationCheckerInterface $authorizationChecker
-     * @param TokenStorageInterface         $tokenStorage
-     * @param HttpKernelInterface           $httpKernel
-     * @param ConfigurationService          $config
-     * @param RouterInterface               $router
-     */
     public function __construct(
         EntityManagerInterface $em,
         LoggerInterface $logger,
@@ -152,21 +104,20 @@ class DOMJudgeService
         $this->router               = $router;
     }
 
-    /**
-     * @return EntityManagerInterface
-     */
-    public function getEntityManager()
+    public function getEntityManager(): EntityManagerInterface
     {
         return $this->em;
     }
 
     /**
-     * Return all the contests that are currently active indexed by contest ID
+     * Return all the contests that are currently active indexed by contest ID.
+     *
      * @param int|null $onlyofteam If -1, get only public contests. If > 0 get only contests for the given team
      * @param bool     $alsofuture If true, also get future contests
+     *
      * @return Contest[]
      */
-    public function getCurrentContests($onlyofteam = null, bool $alsofuture = false)
+    public function getCurrentContests(?int $onlyofteam = null, bool $alsofuture = false): array
     {
         $now = Utils::now();
         $qb  = $this->em->createQueryBuilder();
@@ -176,13 +127,13 @@ class DOMJudgeService
                 ->leftJoin('c.team_categories', 'tc')
                 ->leftJoin('tc.teams', 'tct')
                 ->andWhere('ct.teamid = :teamid OR tct.teamid = :teamid OR c.openToAllTeams = 1')
-                ->setParameter(':teamid', $onlyofteam);
+                ->setParameter('teamid', $onlyofteam);
         } elseif ($onlyofteam === -1) {
             $qb->andWhere('c.public = 1');
         }
         $qb->andWhere('c.enabled = 1')
             ->andWhere('c.deactivatetime IS NULL OR c.deactivatetime > :now')
-            ->setParameter(':now', $now)
+            ->setParameter('now', $now)
             ->orderBy('c.activatetime');
 
         if (!$alsofuture) {
@@ -192,17 +143,21 @@ class DOMJudgeService
         return $qb->getQuery()->getResult();
     }
 
+    public function getCurrrentContestCookie(): ?int
+    {
+        return $this->requestStack->getCurrentRequest()->cookies->getInt('domjudge_cid');
+    }
+
     /**
      * Get the currently selected contest
      * @param int|null $onlyofteam If -1, get only public contests. If > 0 get only contests for the given team
      * @param bool     $alsofuture If true, also get future contests
-     * @return Contest|null
      */
-    public function getCurrentContest($onlyofteam = null, bool $alsofuture = false)
+    public function getCurrentContest(?int $onlyofteam = null, bool $alsofuture = false): ?Contest
     {
         $contests = $this->getCurrentContests($onlyofteam, $alsofuture);
         if ($this->requestStack->getCurrentRequest()) {
-            $selected_cid = $this->requestStack->getCurrentRequest()->cookies->get('domjudge_cid');
+            $selected_cid = $this->getCurrrentContestCookie();
             if ($selected_cid == -1) {
                 return null;
             }
@@ -219,32 +174,17 @@ class DOMJudgeService
         return null;
     }
 
-    /**
-     * Get the contest with the given contest ID
-     * @param int $cid
-     * @return Contest|null
-     */
-    public function getContest($cid)
+    public function getContest(int $cid): ?Contest
     {
         return $this->em->getRepository(Contest::class)->find($cid);
     }
 
-    /**
-     * Get the team with the given team ID
-     * @param int $teamid
-     * @return Team|null
-     */
-    public function getTeam($teamid)
+    public function getTeam(?int $teamid): ?Team
     {
         return $this->em->getRepository(Team::class)->find($teamid);
     }
 
-    /**
-     * Get the problem with the given team ID
-     * @param int $probid
-     * @return Problem|null
-     */
-    public function getProblem($probid)
+    public function getProblem(?int $probid): ?Problem
     {
         return $this->em->getRepository(Problem::class)->find($probid);
     }
@@ -265,16 +205,12 @@ class DOMJudgeService
         return $this->authorizationChecker->isGranted('ROLE_' . strtoupper($rolename));
     }
 
-    public function getClientIp()
+    public function getClientIp(): string
     {
-        return $this->requestStack->getMasterRequest()->getClientIp();
+        return $this->requestStack->getMainRequest()->getClientIp();
     }
 
-    /**
-     * Get the logged in user
-     * @return User|null
-     */
-    public function getUser()
+    public function getUser(): ?User
     {
         $token = $this->tokenStorage->getToken();
         if ($token == null) {
@@ -283,8 +219,8 @@ class DOMJudgeService
 
         $user = $token->getUser();
 
-        // Ignore user objects if they aren't an App user
-        // Covers cases where users are not logged in
+        // Ignore user objects if they aren't an App user.
+        // Covers cases where users are not logged in.
         if (!is_a($user, 'App\Entity\User')) {
             return null;
         }
@@ -293,9 +229,7 @@ class DOMJudgeService
     }
 
     /**
-     * Get the value of the cookie with the given name
-     * @param string $cookieName
-     * @return mixed|null
+     * @return bool|float|int|string|InputBag|null
      */
     public function getCookie(string $cookieName)
     {
@@ -308,28 +242,16 @@ class DOMJudgeService
         return $this->requestStack->getCurrentRequest()->cookies->get($cookieName);
     }
 
-    /**
-     * Set the given cookie on the response, returning the response again to allow chaining
-     * @param string        $cookieName
-     * @param string        $value
-     * @param int           $expire
-     * @param string|null   $path
-     * @param string        $domain
-     * @param bool          $secure
-     * @param bool          $httponly
-     * @param Response|null $response
-     * @return Response
-     */
     public function setCookie(
         string $cookieName,
         string $value = '',
         int $expire = 0,
-        string $path = null,
+        ?string $path = null,
         string $domain = '',
         bool $secure = false,
         bool $httponly = false,
-        Response $response = null
-    ) {
+        ?Response $response = null
+    ): Response {
         if ($response === null) {
             $response = new Response();
         }
@@ -342,24 +264,14 @@ class DOMJudgeService
         return $response;
     }
 
-    /**
-     * Clear the given cookie on the response, returning the response again to allow chaining
-     * @param string        $cookieName
-     * @param string|null   $path
-     * @param string        $domain
-     * @param bool          $secure
-     * @param bool          $httponly
-     * @param Response|null $response
-     * @return Response
-     */
     public function clearCookie(
         string $cookieName,
-        string $path = null,
+        ?string $path = null,
         string $domain = '',
         bool $secure = false,
         bool $httponly = false,
-        Response $response = null
-    ) {
+        ?Response $response = null
+    ): Response {
         if ($response === null) {
             $response = new Response();
         }
@@ -375,11 +287,14 @@ class DOMJudgeService
     {
         $contest = $this->getCurrentContest();
 
-        $clarifications  = [];
-        $judgehosts      = [];
-        $rejudgings      = [];
-        $internal_errors = [];
-        $balloons        = [];
+        $clarifications                = [];
+        $judgehosts                    = [];
+        $rejudgings                    = [];
+        $internal_errors               = [];
+        $balloons                      = [];
+        $shadow_difference_count       = 0;
+        $external_contest_sources      = [];
+        $external_source_warning_count = [];
 
         if ($this->checkRole('jury')) {
             if ($contest) {
@@ -396,7 +311,7 @@ class DOMJudgeService
             $judgehosts = $this->em->createQueryBuilder()
                 ->select('j.hostname', 'j.polltime')
                 ->from(Judgehost::class, 'j')
-                ->andWhere('j.active = 1')
+                ->andWhere('j.enabled = 1')
                 ->andWhere('j.hidden = 0')
                 ->andWhere('j.polltime < :i')
                 ->setParameter('i', time() - $this->config->get('judgehost_critical'))
@@ -410,7 +325,7 @@ class DOMJudgeService
             if ($curContest !== null) {
                 $rejudgings = $rejudgings->join('r.submissions', 's')
                     ->andWhere('s.contest = :contest')
-                    ->setParameter(':contest', $curContest->getCid())
+                    ->setParameter('contest', $curContest->getCid())
                     ->distinct();
             }
             $rejudgings = $rejudgings->getQuery()->getResult();
@@ -423,6 +338,41 @@ class DOMJudgeService
                 ->andWhere('ie.status = :status')
                 ->setParameter('status', 'open')
                 ->getQuery()->getResult();
+
+            if ($this->config->get('data_source') === DOMJudgeService::DATA_SOURCE_CONFIGURATION_AND_LIVE_EXTERNAL) {
+                if ($contest) {
+                    $shadow_difference_count = $this->em->createQueryBuilder()
+                        ->from(Submission::class, 's')
+                        ->innerJoin('s.external_judgements', 'ej', Join::WITH, 'ej.valid = 1')
+                        ->innerJoin('s.judgings', 'j', Join::WITH, 'j.valid = 1')
+                        ->select('COUNT(s.submitid)')
+                        ->andWhere('s.contest = :contest')
+                        ->andWhere('s.externalid IS NOT NULL')
+                        ->andWhere('ej.result IS NOT NULL')
+                        ->andWhere('j.result IS NOT NULL')
+                        ->andWhere('ej.result != j.result')
+                        ->andWhere('ej.verified = false')
+                        ->setParameter('contest', $contest)
+                        ->getQuery()
+                        ->getSingleScalarResult();
+                }
+
+                $external_contest_sources = $this->em->createQueryBuilder()
+                    ->select('ecs.extsourceid', 'ecs.lastPollTime')
+                    ->from(ExternalContestSource::class, 'ecs')
+                    ->andWhere('ecs.enabled = true')
+                    ->andWhere('ecs.lastPollTime < :i OR ecs.lastPollTime is NULL')
+                    ->setParameter('i', time() - $this->config->get('external_contest_source_critical'))
+                    ->getQuery()->getResult();
+
+                $external_source_warning_count = $this->em->createQueryBuilder()
+                                                     ->select('COUNT(w.extwarningid)')
+                                                     ->from(ExternalSourceWarning::class, 'w')
+                                                     ->innerJoin('w.externalContestSource', 'ecs')
+                                                     ->andWhere('ecs.enabled = true')
+                                                     ->getQuery()
+                                                     ->getSingleScalarResult();
+            }
         }
 
         if ($this->checkrole('balloon')) {
@@ -436,13 +386,13 @@ class DOMJudgeService
             ->leftJoin('s.team', 't')
             ->andWhere('co.cid = :cid')
             ->andWhere('b.done = 0')
-            ->setParameter(':cid', $contest->getCid());
+            ->setParameter('cid', $contest->getCid());
 
             $freezetime = $contest->getFreezeTime();
             if ($freezetime !== null && !(bool)$this->config->get('show_balloons_postfreeze')) {
                 $balloonsQuery
                     ->andWhere('s.submittime < :freeze')
-                    ->setParameter(':freeze', $freezetime);
+                    ->setParameter('freeze', $freezetime);
             }
 
             $balloons = $balloonsQuery->getQuery()->getResult();
@@ -453,7 +403,10 @@ class DOMJudgeService
             'judgehosts' => $judgehosts,
             'rejudgings' => $rejudgings,
             'internal_errors' => $internal_errors,
-            'balloons' => $balloons
+            'balloons' => $balloons,
+            'shadow_difference_count' => $shadow_difference_count,
+            'external_contest_sources' => $external_contest_sources,
+            'external_source_warning_count' => $external_source_warning_count,
         ];
     }
 
@@ -466,10 +419,8 @@ class DOMJudgeService
      * Run the given callable with all roles.
      *
      * This will result in all calls to checkrole() to return true.
-     *
-     * @param callable $callable
      */
-    public function withAllRoles(callable $callable)
+    public function withAllRoles(callable $callable): void
     {
         $currentToken = $this->tokenStorage->getToken();
         // We need a 'user' to create a token. However, even if you
@@ -480,7 +431,6 @@ class DOMJudgeService
             $this->tokenStorage->setToken(
                 new UsernamePasswordToken(
                     $currentToken->getUser(),
-                    null,
                     'main',
                     ['ROLE_ADMIN']
                 )
@@ -491,14 +441,9 @@ class DOMJudgeService
     }
 
     /**
-     * Log an action to the auditlog table
+     * Log an action to the auditlog table.
      *
-     * @param string     $datatype
-     * @param mixed      $dataid
-     * @param string     $action
-     * @param mixed|null $extraInfo
-     * @param mixed|null $forceUsername
-     * @param int|null   $cid
+     * @param string|int|null $cid
      */
     public function auditlog(
         string $datatype,
@@ -535,51 +480,35 @@ class DOMJudgeService
     /**
      * Call alert plugin program to perform user configurable action on
      * important system events. See default alert script for more details.
-     *
-     * @param string $messageType
-     * @param string $description
      */
-    public function alert(string $messageType, string $description = '')
+    public function alert(string $messageType, string $description = ''): void
     {
         $alert = $this->params->get('domjudge.libdir') . '/alert';
         system(sprintf('%s %s %s &', $alert, escapeshellarg($messageType), escapeshellarg($description)));
     }
 
     /**
-     * Decode a JSON string and handle errors
-     * @param string $str
+     * Decode a JSON string with our preferred settings.
      * @return mixed
      */
     public function jsonDecode(string $str)
     {
-        $res = json_decode($str, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new HttpException(500, sprintf("Error decoding JSON data '%s': %s", $str, json_last_error_msg()));
-        }
-        return $res;
+        return json_decode($str, true, 512, JSON_THROW_ON_ERROR);
     }
 
     /**
-     * Decode a JSON string and handle errors
-     * @param $data
-     * @return string
+     * Encode a JSON string with our preferred settings.
+     * @param mixed $data
      */
     public function jsonEncode($data): string
     {
-        $res = json_encode($data);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw new HttpException(500, sprintf("Error encoding data to JSON: %s", json_last_error_msg()));
-        }
-        return $res;
+        return json_encode($data, JSON_PRESERVE_ZERO_FRACTION | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 
     /**
      * Dis- or re-enable what caused an internal error.
-     * @param array        $disabled
-     * @param Contest|null $contest
-     * @param bool|null    $enabled
      */
-    public function setInternalError($disabled, $contest, $enabled)
+    public function setInternalError(array $disabled, ?Contest $contest, ?bool $enabled)
     {
         switch ($disabled['kind']) {
             case 'problem':
@@ -588,19 +517,19 @@ class DOMJudgeService
                     ->set('p.allowJudge', ':enabled')
                     ->andWhere('p.contest = :cid')
                     ->andWhere('p.problem = :probid')
-                    ->setParameter(':enabled', $enabled)
-                    ->setParameter(':cid', $contest)
-                    ->setParameter(':probid', $disabled['probid'])
+                    ->setParameter('enabled', $enabled)
+                    ->setParameter('cid', $contest)
+                    ->setParameter('probid', $disabled['probid'])
                     ->getQuery()
                     ->execute();
                 break;
             case 'judgehost':
                 $this->em->createQueryBuilder()
                     ->update(Judgehost::class, 'j')
-                    ->set('j.active', ':active')
+                    ->set('j.enabled', ':enabled')
                     ->andWhere('j.hostname = :hostname')
-                    ->setParameter(':active', $enabled)
-                    ->setParameter(':hostname', $disabled['hostname'])
+                    ->setParameter('enabled', $enabled)
+                    ->setParameter('hostname', $disabled['hostname'])
                     ->getQuery()
                     ->execute();
                 break;
@@ -609,8 +538,8 @@ class DOMJudgeService
                     ->update(Language::class, 'lang')
                     ->set('lang.allowJudge', ':enabled')
                     ->andWhere('lang.langid = :langid')
-                    ->setParameter(':enabled', $enabled)
-                    ->setParameter(':langid', $disabled['langid'])
+                    ->setParameter('enabled', $enabled)
+                    ->setParameter('langid', $disabled['langid'])
                     ->getQuery()
                     ->execute();
                 break;
@@ -664,17 +593,16 @@ class DOMJudgeService
     }
 
     /**
-     * Perform an internal API request to the given URL with the given data
+     * Perform an internal API request to the given URL with the given data.
      *
-     * @param string $url
-     * @param string $method
-     * @param array  $queryData
      * @return mixed|null
-     * @throws \Exception
      */
     public function internalApiRequest(string $url, string $method = Request::METHOD_GET, array $queryData = [])
     {
         $request  = Request::create('/api' . $url, $method, $queryData);
+        if ($this->requestStack->getCurrentRequest() && $this->requestStack->getCurrentRequest()->hasSession()) {
+            $request->setSession($this->requestStack->getSession());
+        }
         $response = $this->getHttpKernel()->handle($request, HttpKernelInterface::SUB_REQUEST);
 
         $status = $response->getStatusCode();
@@ -689,56 +617,31 @@ class DOMJudgeService
         return $this->jsonDecode($response->getContent());
     }
 
-    /**
-     * Get the etc directory of this DOMjudge installation
-     * @return string
-     */
     public function getDomjudgeEtcDir(): string
     {
         return $this->params->get('domjudge.etcdir');
     }
 
-    /**
-     * Get the tmp directory of this DOMjudge installation
-     * @return string
-     */
     public function getDomjudgeTmpDir(): string
     {
         return $this->params->get('domjudge.tmpdir');
     }
 
-    /**
-     * Get the webapp directory of this DOMjudge installation
-     * @return string
-     */
     public function getDomjudgeWebappDir(): string
     {
         return $this->params->get('domjudge.webappdir');
     }
 
-    /**
-     * Get the documentation links
-     * @return array
-     */
     public function getDocLinks(): array
     {
         return $this->params->get('domjudge.doc_links');
     }
 
-    /**
-     * Get the directory used for storing cache files
-     * @return string
-     */
     public function getCacheDir(): string
     {
         return $this->params->get('kernel.cache_dir');
     }
 
-    /**
-     * Open the given ZIP file
-     * @param string $filename
-     * @return ZipArchive
-     */
     public function openZipFile(string $filename): ZipArchive
     {
         $zip = new ZipArchive();
@@ -768,8 +671,6 @@ class DOMJudgeService
      * @param string|null $teamname Teamname of the team this user belongs to, if any
      * @param int|null    $teamid   Teamid of the team this user belongs to, if any
      * @param string|null $location Room/place of the team, if any.
-     * @return array
-     * @throws \Exception
      */
     public function printFile(
         string $filename,
@@ -807,12 +708,11 @@ class DOMJudgeService
     }
 
     /**
-     * Get a ZIP with sample data
+     * Get a ZIP with sample data.
      *
-     * @param ContestProblem $contestProblem
      * @return string Content of samples zip file.
      */
-    public function getSamplesZipContent(ContestProblem $contestProblem)
+    public function getSamplesZipContent(ContestProblem $contestProblem): string
     {
         /** @var Testcase[] $testcases */
         $testcases = $this->em->createQueryBuilder()
@@ -824,8 +724,8 @@ class DOMJudgeService
             ->andWhere('tc.problem = :problem')
             ->andWhere('tc.sample = 1')
             ->andWhere('cp.allowSubmit = 1')
-            ->setParameter(':problem', $contestProblem->getProblem())
-            ->setParameter(':contest', $contestProblem->getContest())
+            ->setParameter('problem', $contestProblem->getProblem())
+            ->setParameter('contest', $contestProblem->getContest())
             ->orderBy('tc.testcaseid')
             ->getQuery()
             ->getResult();
@@ -843,7 +743,7 @@ class DOMJudgeService
 
         foreach ($testcases as $index => $testcase) {
             foreach (['input', 'output'] as $type) {
-                $extension = substr($type, 0, -3);
+                $extension = Testcase::EXTENSION_MAPPING[$type];
 
                 $filename = sprintf("%s.%s", $index + 1, $extension);
                 $content  = null;
@@ -888,9 +788,9 @@ class DOMJudgeService
             ->select('a', 'ac')
             ->andWhere('a.problem = :problem')
             ->andWhere('a.attachmentid = :attachmentid')
-            ->setParameter(':problem', $contestProblem->getProbid())
-            ->setParameter(':contest', $contestProblem->getContest())
-            ->setParameter(':attachmentid', $attachmentId)
+            ->setParameter('problem', $contestProblem->getProbid())
+            ->setParameter('contest', $contestProblem->getContest())
+            ->setParameter('attachmentid', $attachmentId)
             ->getQuery()
             ->getOneOrNullResult();
         if (!$attachment) {
@@ -901,8 +801,6 @@ class DOMJudgeService
     }
 
     /**
-     * @param Contest $contest
-     * @return array
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
@@ -914,7 +812,7 @@ class DOMJudgeService
                 'SELECT COUNT(s)
                 FROM App\Entity\Submission s
                 WHERE s.contest = :cid')
-            ->setParameter(':cid', $contest->getCid())
+            ->setParameter('cid', $contest->getCid())
             ->getSingleScalarResult();
         $stats['num_queued'] = (int)$this->em
             ->createQuery(
@@ -924,7 +822,7 @@ class DOMJudgeService
                 WHERE s.contest = :cid
                 AND j.result IS NULL
                 AND s.valid = 1')
-            ->setParameter(':cid', $contest->getCid())
+            ->setParameter('cid', $contest->getCid())
             ->getSingleScalarResult();
         $stats['num_judging'] = (int)$this->em
             ->createQuery(
@@ -935,12 +833,16 @@ class DOMJudgeService
                 AND j.result IS NULL
                 AND j.valid = 1
                 AND s.valid = 1')
-            ->setParameter(':cid', $contest->getCid())
+            ->setParameter('cid', $contest->getCid())
             ->getSingleScalarResult();
         return $stats;
     }
 
-    public function getTwigDataForProblemsAction(int $teamId, StatisticsService $statistics): array {
+    /**
+     * @throws NonUniqueResultException
+     */
+    public function getTwigDataForProblemsAction(int $teamId, StatisticsService $statistics): array
+    {
         $contest            = $this->getCurrentContest($teamId);
         $showLimits         = (bool)$this->config->get('show_limits_on_team_page');
         $defaultMemoryLimit = (int)$this->config->get('memory_limit');
@@ -966,7 +868,7 @@ class DOMJudgeService
                 ->select('partial p.{probid,name,externalid,problemtext_type,timelimit,memlimit}', 'cp', 'a')
                 ->andWhere('cp.contest = :contest')
                 ->andWhere('cp.allowSubmit = 1')
-                ->setParameter(':contest', $contest)
+                ->setParameter('contest', $contest)
                 ->addOrderBy('cp.shortname')
                 ->getQuery()
                 ->getResult();
@@ -979,12 +881,11 @@ class DOMJudgeService
                 ->select('p.probid', 'SUM(tc.sample) AS numsamples')
                 ->andWhere('cp.contest = :contest')
                 ->andWhere('cp.allowSubmit = 1')
-                ->setParameter(':contest', $contest)
+                ->setParameter('contest', $contest)
                 ->groupBy('cp.problem')
                 ->getQuery()
                 ->getResult();
 
-            $samples = [];
             foreach ($samplesData as $sample) {
                 $samples[$sample['probid']] = $sample['numsamples'];
             }
@@ -1002,9 +903,7 @@ class DOMJudgeService
             $freezeData = new FreezeData($contest);
             $data['stats'] = $statistics->getGroupedProblemsStats(
                 $contest,
-                array_map(function (ContestProblem $problem) {
-                    return $problem->getProblem();
-                }, $problems),
+                array_map(fn(ContestProblem $problem) => $problem->getProblem(), $problems),
                 $freezeData->showFinal(false),
                 (bool)$this->config->get('verification_required')
             );
@@ -1059,7 +958,7 @@ class DOMJudgeService
             ->join(Language::class, 'l', Join::WITH, 's.language = l.langid')
             ->where('jt.jobid IS NULL')
             ->andWhere('l.langid = :langid')
-            ->setParameter(':langid', $langId)
+            ->setParameter('langid', $langId)
             ->getQuery()
             ->getResult();
         foreach ($judgings as $judging) {
@@ -1078,7 +977,7 @@ class DOMJudgeService
             ->join(Problem::class, 'p', Join::WITH, 's.problem = p.probid')
             ->where('jt.jobid IS NULL')
             ->andWhere('p.probid = :probid')
-            ->setParameter(':probid', $probId)
+            ->setParameter('probid', $probId)
             ->getQuery()
             ->getResult();
         foreach ($judgings as $judging) {
@@ -1088,7 +987,6 @@ class DOMJudgeService
 
     public function maybeCreateJudgeTasks(Judging $judging, int $priority = JudgeTask::PRIORITY_DEFAULT): void
     {
-        /** @var Submission $submission */
         $submission = $judging->getSubmission();
         $problem    = $submission->getContestProblem();
         $language   = $submission->getLanguage();
@@ -1124,7 +1022,7 @@ class DOMJudgeService
             ':run_script_id'     => $runExecutable->getImmutableExecId(),
             // TODO: store this in the database as well instead of recomputing it here over and over again, doing
             // this will also help to make the whole data immutable.
-            ':compile_config'    => json_encode(
+            ':compile_config'    => $this->jsonEncode(
                 [
                     'script_timelimit'      => $this->config->get('script_timelimit'),
                     'script_memory_limit'   => $this->config->get('script_memory_limit'),
@@ -1134,7 +1032,7 @@ class DOMJudgeService
                     'hash'                  => $compileExecutable->getHash(),
                 ]
             ),
-            ':run_config'        => json_encode(
+            ':run_config'        => $this->jsonEncode(
                 [
                     'time_limit'    => $problem->getProblem()->getTimelimit() * $submission->getLanguage()->getTimeFactor(),
                     'memory_limit'  => $memoryLimit,
@@ -1144,7 +1042,7 @@ class DOMJudgeService
                     'hash'          => $runExecutable->getHash(),
                 ]
             ),
-            ':compare_config'    => json_encode(
+            ':compare_config'    => $this->jsonEncode(
                 [
                     'script_timelimit'      => $this->config->get('script_timelimit'),
                     'script_memory_limit'   => $this->config->get('script_memory_limit'),
@@ -1171,21 +1069,26 @@ class DOMJudgeService
             $judgetaskInsertParams[':testcase_id' . $testcase->getTestcaseid()] = $testcase->getTestcaseid();
             $judgetaskInsertParams[':testcase_hash' . $testcase->getTestcaseid()] = $testcase->getMd5sumInput() . '_' . $testcase->getMd5sumOutput();
         }
-        $judgetaskColumns = array_map(function (string $column) {
-            return substr($column, 1);
-        }, $judgetaskDefaultParamNames);
+        $judgetaskColumns = array_map(fn(string $column) => substr($column, 1), $judgetaskDefaultParamNames);
         $judgetaskInsertQuery = sprintf(
             'INSERT INTO judgetask (%s, testcase_id, testcase_hash) VALUES %s',
             implode(', ', $judgetaskColumns),
             implode(', ', $judgetaskInsertParts)
         );
-        $this->em->getConnection()->executeQuery($judgetaskInsertQuery, $judgetaskInsertParams);
+
+        $judgetaskInsertParamsWithoutColon = [];
+        foreach ($judgetaskInsertParams as $key => $param) {
+            $key = str_replace(':', '', $key);
+            $judgetaskInsertParamsWithoutColon[$key] = $param;
+        }
+
+        $this->em->getConnection()->executeQuery($judgetaskInsertQuery, $judgetaskInsertParamsWithoutColon);
 
         // Step 3: Fetch the judgetasks ID's per testcase.
         $judgetaskData = $this->em->getConnection()->executeQuery(
             'SELECT judgetaskid, testcase_id FROM judgetask WHERE jobid = :jobid ORDER BY judgetaskid',
-            [':jobid' => $judging->getJudgingid()]
-        )->fetchAll(FetchMode::ASSOCIATIVE);
+            ['jobid' => $judging->getJudgingid()]
+        )->fetchAllAssociative();
 
         // Step 4: Create and insert the corresponding judging runs.
         $judgingRunInsertParams = [':judgingid' => $judging->getJudgingid()];
@@ -1204,7 +1107,13 @@ class DOMJudgeService
             implode(', ', $judgingRunInsertParts)
         );
 
-        $this->em->getConnection()->executeQuery($judgingRunInsertQuery, $judgingRunInsertParams);
+        $judgingRunInsertParamsWithoutColon = [];
+        foreach ($judgingRunInsertParams as $key => $param) {
+            $key = str_replace(':', '', $key);
+            $judgingRunInsertParamsWithoutColon[$key] = $param;
+        }
+
+        $this->em->getConnection()->executeQuery($judgingRunInsertQuery, $judgingRunInsertParamsWithoutColon);
 
         $team = $submission->getTeam();
         $result = $this->em->createQueryBuilder()
@@ -1213,10 +1122,10 @@ class DOMJudgeService
             ->andWhere('qt.team = :team')
             ->andWhere('qt.priority = :priority')
             ->andWhere('qt.teamPriority >= :cutoffTeamPriority')
-            ->setParameter(':team', $team)
-            ->setParameter(':priority', $priority)
+            ->setParameter('team', $team)
+            ->setParameter('priority', $priority)
             // Only consider judgings which have been placed at most 60 virtual seconds ago.
-            ->setParameter(':cutoffTeamPriority', (int)$submission->getSubmittime() - 60)
+            ->setParameter('cutoffTeamPriority', (int)$submission->getSubmittime() - 60)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -1280,7 +1189,8 @@ class DOMJudgeService
         return $executable->getImmutableExecutable();
     }
 
-    private function getProblemsForExecutable(Executable $executable) {
+    private function getProblemsForExecutable(Executable $executable): array
+    {
         $ret = array_merge($executable->getProblemsCompare()->toArray(),
             $executable->getProblemsRun()->toArray());
 
@@ -1317,7 +1227,7 @@ class DOMJudgeService
 
         $results = [];
         foreach (scandir($customDir) as $file) {
-            foreach (static::MIMETYPE_TO_EXTENSION as $extension) {
+            foreach (array_merge(['css','js'], static::MIMETYPE_TO_EXTENSION) as $extension) {
                 if (strpos($file, '.' . $extension) !== false) {
                     $results[] = $file;
                 }
@@ -1330,12 +1240,8 @@ class DOMJudgeService
     /**
      * Get the path of an asset if it exists
      *
-     * @param string $name
-     * @param string $type
      * @param bool $fullPath If true, get the full path. If false, get the webserver relative path
      * @param string|null $forceExtension If set, also return the asset path if it does not exist currently and use the given extension
-     *
-     * @return string|null
      */
     public function assetPath(string $name, string $type, bool $fullPath = false, ?string $forceExtension = null): ?string
     {
@@ -1380,7 +1286,7 @@ class DOMJudgeService
     }
 
     /**
-     * Get the full asset path for the given entity and property
+     * Get the full asset path for the given entity and property.
      */
     public function fullAssetPath(AssetEntityInterface $entity, string $property, bool $useExternalid, ?string $forceExtension = null): ?string
     {
@@ -1415,12 +1321,12 @@ class DOMJudgeService
             ->leftJoin('tc.contests', 'cc')
             ->andWhere(sprintf('t.%s = :team', $idField))
             ->andWhere('t.enabled = 1')
-            ->setParameter(':team', $teamId);
+            ->setParameter('team', $teamId);
 
         if (!$contest->isOpenToAllTeams()) {
             $queryBuilder
                 ->andWhere('c.cid = :cid OR cc.cid = :cid')
-                ->setParameter(':cid', $contest->getCid());
+                ->setParameter('cid', $contest->getCid());
         }
 
         /** @var Team $team */
@@ -1435,7 +1341,7 @@ class DOMJudgeService
 
     public function parseMetadata($raw_metadata): array
     {
-        // TODO: reduce duplication with judgedaemon code.
+        // TODO: Reduce duplication with judgedaemon code.
         $contents = explode("\n", $raw_metadata);
         $res = [];
         foreach($contents as $line) {

@@ -3,7 +3,6 @@
 namespace App\Doctrine\DBAL\Types;
 
 use Doctrine\DBAL\Platforms\AbstractPlatform;
-use Doctrine\DBAL\Platforms\MySqlPlatform;
 use Doctrine\DBAL\Types\ConversionException;
 use Doctrine\DBAL\Types\JsonType as BaseJsonType;
 
@@ -15,29 +14,27 @@ use Doctrine\DBAL\Types\JsonType as BaseJsonType;
  * which gives some inconsistencies between the API and event feed.
  *
  * Also we always want a LONGTEXT field and not a JSON field, as that is only
- * supported by MySQL 5.7+
+ * supported by MySQL 5.7+.
  *
  * @package App\Doctrine\DBAL\Types
  */
 class JsonType extends BaseJsonType
 {
-    /**
-     * @inheritDoc
-     */
-    public function getSQLDeclaration(array $fieldDeclaration, AbstractPlatform $platform)
+    public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
     {
-        if (!empty($fieldDeclaration['length'])) {
-            if ($fieldDeclaration['length'] <= 255) {
-                return $platform->getVarcharTypeDeclarationSQL($fieldDeclaration);
+        if (!empty($column['length'])) {
+            if ($column['length'] <= 255) {
+                return $platform->getVarcharTypeDeclarationSQL($column);
             } else {
-                return $platform->getClobTypeDeclarationSQL($fieldDeclaration);
+                return $platform->getClobTypeDeclarationSQL($column);
             }
         }
         return 'LONGTEXT';
     }
 
     /**
-     * @inheritdoc
+     * @return string|false|null
+     * @throws ConversionException
      */
     public function convertToDatabaseValue($value, AbstractPlatform $platform)
     {
@@ -45,19 +42,10 @@ class JsonType extends BaseJsonType
             return null;
         }
 
-        $encoded = json_encode($value, JSON_PRESERVE_ZERO_FRACTION);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw ConversionException::conversionFailedSerialization($value, 'json', json_last_error_msg());
-        }
-
-        return $encoded;
+        return json_encode($value, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function requiresSQLCommentHint(AbstractPlatform $platform)
+    public function requiresSQLCommentHint(AbstractPlatform $platform): bool
     {
         return true;
     }

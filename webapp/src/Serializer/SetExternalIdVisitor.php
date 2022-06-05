@@ -6,6 +6,7 @@ use App\Entity\Clarification;
 use App\Entity\ExternalRelationshipEntityInterface;
 use App\Entity\Submission;
 use App\Service\EventLogService;
+use BadMethodCallException;
 use JMS\Serializer\EventDispatcher\Events;
 use JMS\Serializer\EventDispatcher\EventSubscriberInterface;
 use JMS\Serializer\EventDispatcher\ObjectEvent;
@@ -18,24 +19,14 @@ use JMS\Serializer\Metadata\StaticPropertyMetadata;
  */
 class SetExternalIdVisitor implements EventSubscriberInterface
 {
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
+    protected EventLogService $eventLogService;
 
-    /**
-     * ContestVisitor constructor.
-     * @param EventLogService $eventLogService
-     */
     public function __construct(EventLogService $eventLogService)
     {
         $this->eventLogService = $eventLogService;
     }
 
-    /**
-     * @inheritdoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [
             [
@@ -46,11 +37,7 @@ class SetExternalIdVisitor implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ObjectEvent $event
-     * @throws \Exception
-     */
-    public function onPostSerialize(ObjectEvent $event)
+    public function onPostSerialize(ObjectEvent $event): void
     {
         /** @var JsonSerializationVisitor $visitor */
         $visitor = $event->getVisitor();
@@ -77,14 +64,29 @@ class SetExternalIdVisitor implements EventSubscriberInterface
                 );
                 $visitor->visitProperty($property, $object->getExternalid());
             }
-        } catch (\BadMethodCallException $e) {
-            // Ignore these exceptions, as this means this is not an entity or it is not configured
+        } catch (BadMethodCallException $e) {
+            // Ignore these exceptions, as this means this is not an entity or it is not configured.
         }
 
         if ($object instanceof ExternalRelationshipEntityInterface) {
             foreach ($object->getExternalRelationships() as $field => $entity) {
                 try {
-                    if ($entity && $externalIdField = $this->eventLogService->externalIdFieldForEntity(get_class($entity))) {
+                    if (is_array($entity)) {
+                        if (empty($entity) || !($externalIdField = $this->eventLogService->externalIdFieldForEntity(get_class($entity[0])))) {
+                            continue;
+                        }
+                        $method = sprintf('get%s', ucfirst($externalIdField));
+                        $property = new StaticPropertyMetadata(
+                            get_class($object),
+                            $field,
+                            null
+                        );
+                        $data = [];
+                        foreach ($entity as $item) {
+                            $data[] = $item->{$method}();
+                        }
+                        $visitor->visitProperty($property, $data);
+                    } elseif ($entity && $externalIdField = $this->eventLogService->externalIdFieldForEntity(get_class($entity))) {
                         $method = sprintf('get%s', ucfirst($externalIdField));
                         if (method_exists($entity, $method)) {
                             $property = new StaticPropertyMetadata(
@@ -104,8 +106,8 @@ class SetExternalIdVisitor implements EventSubscriberInterface
                         );
                         $visitor->visitProperty($property, $entity->getExternalid());
                     }
-                } catch (\BadMethodCallException $e) {
-                    // Ignore these exceptions, as this means this is not an entity or it is not configured
+                } catch (BadMethodCallException $e) {
+                    // Ignore these exceptions, as this means this is not an entity or it is not configured.
                 }
             }
         }

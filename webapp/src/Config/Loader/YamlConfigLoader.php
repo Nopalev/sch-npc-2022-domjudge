@@ -8,7 +8,7 @@ use Symfony\Component\Yaml\Yaml;
 /**
  * Class YamlConfigLoader
  *
- * Class that loads a YAML file
+ * Class that loads a YAML file.
  *
  * @see     https://symfony.com/doc/current/components/config/resources.html#resource-loaders
  *
@@ -17,17 +17,14 @@ use Symfony\Component\Yaml\Yaml;
 class YamlConfigLoader extends FileLoader
 {
     /**
-     * @inheritDoc
+     * @return mixed
      */
     public function load($resource, $type = null)
     {
         return Yaml::parse(file_get_contents($resource));
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function supports($resource, $type = null)
+    public function supports($resource, $type = null): bool
     {
         return is_string($resource) &&
             pathinfo($resource, PATHINFO_EXTENSION) === 'yaml';

@@ -8,6 +8,7 @@ use App\Service\CheckConfigService;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
+use App\Service\ImportProblemService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
@@ -33,42 +34,16 @@ use Symfony\Component\Routing\RouterInterface;
  */
 class GeneralInfoController extends AbstractFOSRestController
 {
-    protected $apiVersion = 4;
+    protected const API_VERSION = 4;
 
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var EventLogService
-     */
-    protected $checkConfigService;
-
-    /**
-     * @var RouterInterface
-     */
-    protected $router;
-
-    /**
-     * @var LoggerInterface
-     */
-    protected $logger;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
+    protected CheckConfigService $checkConfigService;
+    protected RouterInterface $router;
+    protected LoggerInterface $logger;
+    protected ImportProblemService $importProblemService;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -77,15 +52,17 @@ class GeneralInfoController extends AbstractFOSRestController
         EventLogService $eventLogService,
         CheckConfigService $checkConfigService,
         RouterInterface $router,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        ImportProblemService $importProblemService
     ) {
-        $this->em                 = $em;
-        $this->dj                 = $dj;
-        $this->eventLogService    = $eventLogService;
-        $this->checkConfigService = $checkConfigService;
-        $this->router             = $router;
-        $this->config             = $config;
-        $this->logger             = $logger;
+        $this->em                   = $em;
+        $this->dj                   = $dj;
+        $this->eventLogService      = $eventLogService;
+        $this->checkConfigService   = $checkConfigService;
+        $this->router               = $router;
+        $this->config               = $config;
+        $this->logger               = $logger;
+        $this->importProblemService = $importProblemService;
     }
 
     /**
@@ -102,7 +79,7 @@ class GeneralInfoController extends AbstractFOSRestController
      */
     public function getVersionAction(): array
     {
-        return ['api_version' => $this->apiVersion];
+        return ['api_version' => static::API_VERSION];
     }
 
     /**
@@ -124,7 +101,7 @@ class GeneralInfoController extends AbstractFOSRestController
     public function getInfoAction(): array
     {
         return [
-            'api_version' => $this->apiVersion,
+            'api_version' => static::API_VERSION,
             'domjudge_version' => $this->getParameter('domjudge.version'),
             'environment' => $this->getParameter('kernel.environment'),
             'doc_url' => $this->router->generate('app.swagger_ui', [], RouterInterface::ABSOLUTE_URL),
@@ -179,7 +156,7 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Get information about the currently logged in user
+     * Get information about the currently logged in user.
      * @Rest\Get("/user")
      * @OA\Response(
      *     response="200",
@@ -187,7 +164,7 @@ class GeneralInfoController extends AbstractFOSRestController
      *     @Model(type=User::class)
      * )
      */
-    public function getUserAction() : User
+    public function getUserAction(): User
     {
         $user = $this->dj->getUser();
         if ($user === null) {
@@ -198,7 +175,7 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Get configuration variables
+     * Get configuration variables.
      * @Rest\Get("/config")
      * @OA\Response(
      *     response="200",
@@ -212,9 +189,8 @@ class GeneralInfoController extends AbstractFOSRestController
      *     required=false,
      *     @OA\Schema(type="string")
      * )
-     * @throws Exception
      */
-    public function getDatabaseConfigurationAction(Request $request) : array
+    public function getDatabaseConfigurationAction(Request $request): array
     {
         $onlypublic = !($this->dj->checkrole('jury') || $this->dj->checkrole('judgehost'));
         $name       = $request->query->get('name');
@@ -233,7 +209,7 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Update configuration variables
+     * Update configuration variables.
      * @Rest\Put("/config")
      * @IsGranted("ROLE_ADMIN")
      * @OA\Response(
@@ -246,7 +222,8 @@ class GeneralInfoController extends AbstractFOSRestController
      *     @OA\MediaType(mediaType="application/x-www-form-urlencoded"),
      *     @OA\MediaType(mediaType="application/json")
      * )
-     * @throws Exception
+     *
+     * @throws NonUniqueResultException
      */
     public function updateConfigurationAction(Request $request): array
     {
@@ -255,7 +232,7 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Check the DOMjudge configuration
+     * Check the DOMjudge configuration.
      * @Rest\Get("/config/check")
      * @IsGranted("ROLE_ADMIN")
      * @OA\Response(
@@ -291,7 +268,7 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Get the flag for the given country
+     * Get the flag for the given country.
      * @Rest\Get("/country-flags/{countryCode}/{size}")
      * @OA\Response(
      *     response="200",
@@ -308,7 +285,7 @@ class GeneralInfoController extends AbstractFOSRestController
     public function countryFlagAction(Request $request, string $countryCode, string $size): Response
     {
         // This API action exists for two reasons
-        // - Relative URL's are relative to the API root according to the CCS spec. This
+        // - Relative URLs are relative to the API root according to the CCS spec. This
         //   means that we need to have an API endpoint for files.
         // - This makes it that we can not return a flag if flags are disabled.
 
@@ -331,7 +308,50 @@ class GeneralInfoController extends AbstractFOSRestController
     }
 
     /**
-     * Get the field to use for getting contests by ID
+     * Add a problem without linking it to a contest.
+     * @Rest\Post("/problems")
+     * @IsGranted("ROLE_ADMIN")
+     * @OA\Post()
+     * @OA\Tag(name="Problems")
+     * @OA\RequestBody(
+     *     required=true,
+     *     @OA\MediaType(
+     *         mediaType="multipart/form-data",
+     *         @OA\Schema(
+     *             required={"zip"},
+     *             @OA\Property(
+     *                 property="zip",
+     *                 type="string",
+     *                 format="binary",
+     *                 description="The problem archive to import"
+     *             ),
+     *             @OA\Property(
+     *                 property="problem",
+     *                 description="Optional: problem id to update.",
+     *                 type="string"
+     *             )
+     *         )
+     *     )
+     * )
+     * @OA\Response(
+     *     response="200",
+     *     description="Returns the ID of the imported problem and any messages produced",
+     *     @OA\JsonContent(
+     *         type="object",
+     *         @OA\Property(property="problem_id", type="integer", description="The ID of the imported problem"),
+     *         @OA\Property(property="messages", type="array",
+     *             @OA\Items(type="string", description="Messages produced while adding problems")
+     *         )
+     *     )
+     * )
+     */
+    public function addProblemAction(Request $request): array
+    {
+        return $this->importProblemService->importProblemFromRequest($request);
+    }
+
+    /**
+     * Get the field to use for getting contests by ID.
      */
     protected function getContestIdField(): string
     {

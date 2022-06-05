@@ -10,12 +10,10 @@ use App\Service\EventLogService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use OpenApi\Annotations as OA;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -32,7 +30,7 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
     /**
      * @var string[]
      */
-    protected $verdicts;
+    protected array $verdicts;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -48,9 +46,7 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
     }
 
     /**
-     * Get all the runs for this contest
-     * @param Request $request
-     * @return Response
+     * Get all the runs for this contest.
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST') or is_granted('ROLE_API_READER')")
      * @Rest\Get("")
      * @OA\Response(
@@ -94,13 +90,13 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
      * )
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request)
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given run for this contest
+     * Get the given run for this contest.
      * @throws NonUniqueResultException
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_JUDGEHOST') or is_granted('ROLE_API_READER')")
      * @Rest\Get("/{id}")
@@ -117,14 +113,11 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
         $queryBuilder = $this->em->createQueryBuilder()
@@ -138,31 +131,31 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
             // With the new judgehost API we pre-create the judging_runs; only expose those who correspond to a real run
             // on a judgehost.
             ->andWhere('jr.endtime IS NOT NULL')
-            ->setParameter(':cid', $this->getContestId($request));
+            ->setParameter('cid', $this->getContestId($request));
 
         if ($request->query->has('first_id')) {
             $queryBuilder
                 ->andWhere('jr.runid >= :first_id')
-                ->setParameter(':first_id', $request->query->get('first_id'));
+                ->setParameter('first_id', $request->query->get('first_id'));
         }
 
         if ($request->query->has('last_id')) {
             $queryBuilder
                 ->andWhere('jr.runid = :last_id')
-                ->setParameter(':last_id', $request->query->get('last_id'));
+                ->setParameter('last_id', $request->query->get('last_id'));
         }
 
         if ($request->query->has('judging_id')) {
             $queryBuilder
                 ->andWhere('jr.judging = :judging_id')
-                ->setParameter(':judging_id', $request->query->get('judging_id'));
+                ->setParameter('judging_id', $request->query->get('judging_id'));
         }
 
         if ($request->query->has('limit')) {
             $queryBuilder->setMaxResults($request->query->getInt('limit'));
         }
 
-        // If an ID has not been given directly, only show runs before contest end
+        // If an ID has not been given directly, only show runs before contest end.
         if (!$request->attributes->has('id') && !$request->query->has('ids')) {
             $queryBuilder
                 ->andWhere('s.submittime < c.endtime')
@@ -180,7 +173,7 @@ class RunController extends AbstractRestController implements QueryObjectTransfo
         return 'jr.runid';
     }
 
-    public function transformObject($object) : JudgingRunWrapper
+    public function transformObject($object): JudgingRunWrapper
     {
         /** @var JudgingRun $judgingRun */
         $judgingRun      = $object;

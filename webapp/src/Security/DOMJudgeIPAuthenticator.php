@@ -4,7 +4,6 @@ namespace App\Security;
 
 use App\Entity\User;
 use App\Service\ConfigurationService;
-use App\Service\DOMJudgeService;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,42 +13,38 @@ use Symfony\Component\Routing\RouterInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
 use Symfony\Component\Security\Core\Exception\InvalidCsrfTokenException;
+use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\Security;
-use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Security\Core\User\UserProviderInterface;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
-use Symfony\Component\Security\Guard\AbstractGuardAuthenticator;
+use Symfony\Component\Security\Http\Authenticator\AbstractAuthenticator;
+use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
+use Symfony\Component\Security\Http\Authenticator\Passport\Passport;
+use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPassport;
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
 use Symfony\Component\Security\Http\Util\TargetPathTrait;
 
-class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
+class DOMJudgeIPAuthenticator extends AbstractAuthenticator implements AuthenticationEntryPointInterface
 {
     use TargetPathTrait;
 
-    private $csrfTokenManager;
-    private $security;
-    private $em;
-    private $config;
-    private $router;
-    private $requestStack;
+    private CsrfTokenManagerInterface $csrfTokenManager;
+    private Security $security;
+    private EntityManagerInterface $em;
+    private ConfigurationService $config;
+    private RouterInterface $router;
+    private RequestStack $requestStack;
+    private UserProviderInterface $userProvider;
 
-    /**
-     * DOMJudgeIPAuthenticator constructor.
-     *
-     * @param CsrfTokenManagerInterface $csrfTokenManager
-     * @param Security                  $security
-     * @param EntityManagerInterface    $em
-     * @param ConfigurationService      $config
-     * @param RouterInterface           $router
-     * @param RequestStack              $requestStack
-     */
     public function __construct(
         CsrfTokenManagerInterface $csrfTokenManager,
         Security $security,
         EntityManagerInterface $em,
         ConfigurationService $config,
         RouterInterface $router,
-        RequestStack $requestStack
+        RequestStack $requestStack,
+        UserProviderInterface $userProvider
     ) {
         $this->csrfTokenManager = $csrfTokenManager;
         $this->security         = $security;
@@ -57,12 +52,10 @@ class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
         $this->config           = $config;
         $this->router           = $router;
         $this->requestStack     = $requestStack;
+        $this->userProvider     = $userProvider;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function supports(Request $request)
+    public function supports(Request $request): bool
     {
         // Make sure ipaddress auth is enabled.
         $authmethods          = $this->config->get('auth_methods');
@@ -96,10 +89,7 @@ class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
             && $request->request->get('loginmethod') === 'ipaddress';
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getCredentials(Request $request)
+    public function authenticate(Request $request): Passport
     {
         // Check if we're coming from the auth form.
         if ($request->attributes->get('_route') === 'login' && $request->isMethod('POST')) {
@@ -110,32 +100,23 @@ class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
             }
         }
 
-        // Get the client IP address to use
-        $clientIP = $this->requestStack->getMasterRequest()->getClientIp();
-        return [
-            'username' => $request->request->get('_username'),
-            'authbasic_username' => $request->headers->get('php-auth-user'),
-            'ipaddress' => $clientIP,
-        ];
-    }
+        // Get the client IP address to use.
+        $clientIP = $this->requestStack->getMainRequest()->getClientIp();
+        $username = $request->request->get('_username');
+        $authbasicUsername = $request->headers->get('php-auth-user');
 
-    /**
-     * @inheritDoc
-     */
-    public function getUser($credentials, UserProviderInterface $userProvider)
-    {
         $userRepo = $this->em->getRepository(User::class);
         $filters  = [
-            'ipAddress' => $credentials['ipaddress'],
+            'ipAddress' => $clientIP,
             'enabled' => 1,
         ];
 
-        if ($credentials['authbasic_username']) {
-            $filters['username'] = $credentials['authbasic_username'];
+        if ($authbasicUsername) {
+            $filters['username'] = $authbasicUsername;
         }
 
-        if ($credentials['username']) {
-            $filters['username'] = $credentials['username'];
+        if ($username) {
+            $filters['username'] = $username;
         }
 
         $user        = null;
@@ -144,41 +125,24 @@ class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
             $user = $users[0];
         }
 
-        // Fail if we didn't find a user with a matching ip address
+        // Fail if we didn't find a user with a matching IP address.
         if ($user == null) {
-            return null;
+            throw new UserNotFoundException();
         }
 
-        // if a User object, checkCredentials() is called
-        return $userProvider->loadUserByUsername($user->getUsername());
+        return new SelfValidatingPassport(new UserBadge($user->getUsername()));
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function checkCredentials($credentials, UserInterface $user)
+    public function onAuthenticationSuccess(Request $request, TokenInterface $token, $firewallName): ?Response
     {
-        // check credentials - e.g. make sure the password is valid
-        // no credential check is needed in this case, as if we have a user,
-        // it's because their IP address matched
-
-        // return true to cause authentication success
-        return true;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function onAuthenticationSuccess(Request $request, TokenInterface $token, $providerKey)
-    {
-        // on success, redirect to the last page or the homepage if it was a user triggered action
+        // On success, redirect to the last page or the homepage if it was a user triggered action.
         if ($request->attributes->get('_route') === 'login'
             && $request->isMethod('POST')
             && $request->request->get('loginmethod') === 'ipaddress') {
-            // Use target URL from session if set
-            if ($providerKey !== null &&
-                $targetUrl = $this->getTargetPath($request->getSession(), $providerKey)) {
-                $this->removeTargetPath($request->getSession(), $providerKey);
+            // Use target URL from session if set.
+            if ($firewallName !== null &&
+                $targetUrl = $this->getTargetPath($request->getSession(), $firewallName)) {
+                $this->removeTargetPath($request->getSession(), $firewallName);
                 return new RedirectResponse($targetUrl);
             }
 
@@ -187,32 +151,18 @@ class DOMJudgeIPAuthenticator extends AbstractGuardAuthenticator
         return null;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function onAuthenticationFailure(Request $request, AuthenticationException $exception)
+    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
     {
-        // We never fail the authentication request, something else might handle it
+        // We never fail the authentication request, something else might handle it.
         return null;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function start(Request $request, AuthenticationException $authException = null)
+    public function start(Request $request, AuthenticationException $authException = null): Response
     {
         // If this is the guard that fails/is configured to allow access as the entry_point
-        // send the user a basic auth dialog, as that's probably what they're expecting
+        // send the user a basic auth dialog, as that's probably what they're expecting.
         $resp = new Response('', Response::HTTP_UNAUTHORIZED);
         $resp->headers->set('WWW-Authenticate', sprintf('Basic realm="%s"', 'Secured Area'));
         return $resp;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    public function supportsRememberMe()
-    {
-        return false;
     }
 }

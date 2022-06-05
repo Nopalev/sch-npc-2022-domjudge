@@ -5,6 +5,7 @@ use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use JMS\Serializer\Annotation as Serializer;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
@@ -13,23 +14,21 @@ use Symfony\Component\Validator\Constraints as Assert;
  * @ORM\Entity()
  * @ORM\Table(
  *     name="team_category",
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Categories for teams (e.g.: participants, observers, ...)"},
- *     indexes={@ORM\Index(name="sortorder", columns={"sortorder"})})
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Categories for teams (e.g.: participants, observers, ...)"},
+ *     indexes={@ORM\Index(name="sortorder", columns={"sortorder"})},
+ *     uniqueConstraints={
+ *         @ORM\UniqueConstraint(name="externalid", columns={"externalid"}, options={"lengths": {190}}),
+ *     })
  * @Serializer\VirtualProperty(
  *     "hidden",
  *     exp="!object.getVisible()",
  *     options={@Serializer\Type("boolean")}
  * )
- * @Serializer\VirtualProperty(
- *     "icpc_id",
- *     exp="object.getCategoryid()",
- *     options={@Serializer\Type("string")}
- * )
+ * @UniqueEntity("externalid")
  */
 class TeamCategory extends BaseApiEntity
 {
     /**
-     * @var int
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="categoryid", length=4,
@@ -37,73 +36,86 @@ class TeamCategory extends BaseApiEntity
      * @Serializer\SerializedName("id")
      * @Serializer\Type("string")
      */
-    protected $categoryid;
+    protected ?int $categoryid = null;
 
     /**
-     * @var string
+     * @ORM\Column(type="string", name="externalid", length=255,
+     *     options={"comment"="Team category ID in an external system",
+     *              "collation"="utf8mb4_bin"},
+     *     nullable=true)
+     * @Serializer\Exclude()
+     */
+    protected ?string $externalid = null;
+
+    /**
+     * @ORM\Column(type="string", name="icpcid", length=255,
+     *     options={"comment"="External identifier from ICPC CMS",
+     *              "collation"="utf8mb4_bin"},
+     *     nullable=true)
+     * @Serializer\SerializedName("icpc_id")
+     */
+    protected ?string $icpcid = null;
+
+    /**
      * @ORM\Column(type="string", name="name", length=255,
      *     options={"comment"="Descriptive name"}, nullable=false)
      * @Assert\NotBlank()
      */
-    private $name;
+    private string $name;
 
     /**
-     * @var int
-     * @ORM\Column(type="tinyint", name="sortorder", length=1,
+     * @ORM\Column(type="tinyint", name="sortorder",
      *     options={"comment"="Where to sort this category on the scoreboard",
      *              "unsigned"=true,"default"="0"},
      *     nullable=false)
      * @Serializer\Groups({"Nonstrict"})
      * @Assert\GreaterThanOrEqual(0, message="Only non-negative sortorders are supported")
      */
-    private $sortorder = 0;
+    private int $sortorder = 0;
 
     /**
-     * @var string
      * @ORM\Column(type="string", length=32, name="color",
      *     options={"comment"="Background colour on the scoreboard"},
      *     nullable=true)
      * @Serializer\Groups({"Nonstrict"})
      */
-    private $color;
+    private ?string $color;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="visible",
      *     options={"comment"="Are teams in this category visible?",
      *              "default"="1"},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $visible = true;
+    private bool $visible = true;
 
     /**
-     * @var boolean
      * @ORM\Column(type="boolean", name="allow_self_registration",
      *     options={"comment"="Are self-registered teams allowed to choose this category?",
      *              "default"="0"},
      *     nullable=false)
      * @Serializer\Exclude()
      */
-    private $allow_self_registration = false;
+    private bool $allow_self_registration = false;
 
     /**
      * @ORM\OneToMany(targetEntity="Team", mappedBy="category")
      * @Serializer\Exclude()
      */
-    private $teams;
+    private Collection $teams;
 
     /**
      * @ORM\ManyToMany(targetEntity="Contest", mappedBy="team_categories")
      * @Serializer\Exclude()
      */
-    private $contests;
+    private Collection $contests;
 
     /**
      * @ORM\ManyToMany(targetEntity="Contest", mappedBy="medal_categories")
      * @Serializer\Exclude()
      */
-    private $contests_for_medals;
+    private Collection $contests_for_medals;
 
     public function __construct()
     {
@@ -115,6 +127,28 @@ class TeamCategory extends BaseApiEntity
     public function __toString(): string
     {
         return $this->name;
+    }
+
+    public function setExternalid(?string $externalid): TeamCategory
+    {
+        $this->externalid = $externalid;
+        return $this;
+    }
+
+    public function getExternalid(): ?string
+    {
+        return $this->externalid;
+    }
+
+    public function setIcpcid(?string $icpcid): TeamCategory
+    {
+        $this->icpcid = $icpcid;
+        return $this;
+    }
+
+    public function getIcpcid(): ?string
+    {
+        return $this->icpcid;
     }
 
     public function setCategoryid(int $categoryid): TeamCategory

@@ -10,7 +10,6 @@ use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Service\ScoreboardService;
 use App\Utils\Scoreboard\Filter;
-use App\Utils\Scoreboard\ScoreboardMatrixItem;
 use App\Utils\Utils;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
@@ -19,8 +18,6 @@ use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use OpenApi\Annotations as OA;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
-use Symfony\Component\Intl\Exception\NotImplementedException;
 
 /**
  * @Rest\Route("/contests/{cid}/scoreboard")
@@ -32,10 +29,7 @@ use Symfony\Component\Intl\Exception\NotImplementedException;
  */
 class ScoreboardController extends AbstractRestController
 {
-    /**
-     * @var ScoreboardService
-     */
-    protected $scoreboardService;
+    protected ScoreboardService $scoreboardService;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -49,7 +43,7 @@ class ScoreboardController extends AbstractRestController
     }
 
     /**
-     * Get the scoreboard for this contest
+     * Get the scoreboard for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -93,9 +87,8 @@ class ScoreboardController extends AbstractRestController
      *     @OA\Schema(type="integer")
      * )
      * @throws NonUniqueResultException
-     * @throws Exception
      */
-    public function getScoreboardAction(Request $request) : array
+    public function getScoreboardAction(Request $request): array
     {
         $filter = new Filter();
         if ($request->query->has('category')) {
@@ -115,7 +108,7 @@ class ScoreboardController extends AbstractRestController
         if ($request->query->has('sortorder')) {
             $sortorder = $request->query->getInt('sortorder');
         } else {
-            // Get the lowest available sortorder
+            // Get the lowest available sortorder.
             $queryBuilder = $this->em->createQueryBuilder()
                 ->from(TeamCategory::class, 'c')
                 ->select('MIN(c.sortorder)');
@@ -126,11 +119,11 @@ class ScoreboardController extends AbstractRestController
         }
 
         /** @var Contest $contest */
-        // also checks access of user to the contest via getContestQueryBuilder() from superclass
+        // Also checks access of user to the contest via getContestQueryBuilder() from superclass.
         $contest = $this->em->getRepository(Contest::class)->find($this->getContestId($request));
 
-        // Get the event for this scoreboard
-        // TODO: add support for after_event_id
+        // Get the event for this scoreboard.
+        // TODO: Add support for after_event_id.
         /** @var Event $event */
         $event = $this->em->createQueryBuilder()
             ->from(Event::class, 'e')
@@ -142,7 +135,7 @@ class ScoreboardController extends AbstractRestController
 
         $scoreboard = $this->scoreboardService->getScoreboard($contest, !$public, $filter, !$allTeams);
 
-        // Build up scoreboard results
+        // Build up scoreboard results.
         $results = [
             'event_id' => (string)$event->getEventid(),
             'time' => Utils::absTime($event->getEventtime()),
@@ -162,7 +155,7 @@ class ScoreboardController extends AbstractRestController
             }
             $row = [
                 'rank' => $teamScore->rank,
-                'team_id' => (string)$teamScore->team->getApiId($this->eventLogService),
+                'team_id' => $teamScore->team->getApiId($this->eventLogService),
                 'score' => [
                     'num_solved' => $teamScore->numPoints,
                     'total_time' => $teamScore->totalTime,
@@ -170,12 +163,11 @@ class ScoreboardController extends AbstractRestController
                 'problems' => [],
             ];
 
-            /** @var ScoreboardMatrixItem $matrixItem */
             foreach ($scoreboard->getMatrix()[$teamScore->team->getTeamid()] as $problemId => $matrixItem) {
                 $contestProblem = $scoreboard->getProblems()[$problemId];
                 $problem        = [
                     'label' => $contestProblem->getShortname(),
-                    'problem_id' => (string)$contestProblem->getApiId($this->eventLogService),
+                    'problem_id' => $contestProblem->getApiId($this->eventLogService),
                     'num_judged' => $matrixItem->numSubmissions,
                     'num_pending' => $matrixItem->numSubmissionsPending,
                     'solved' => $matrixItem->isCorrect,
@@ -189,9 +181,7 @@ class ScoreboardController extends AbstractRestController
                 $row['problems'][] = $problem;
             }
 
-            usort($row['problems'], function ($a, $b) {
-                return $a['label'] <=> $b['label'];
-            });
+            usort($row['problems'], fn($a, $b) => $a['label'] <=> $b['label']);
 
             if ($request->query->getBoolean('strict')) {
                 foreach ($row['problems'] as $key => $data) {
@@ -208,11 +198,11 @@ class ScoreboardController extends AbstractRestController
 
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 
     protected function getIdField(): string
     {
-        throw new NotImplementedException();
+        throw new Exception('Not implemented');
     }
 }

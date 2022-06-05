@@ -48,7 +48,7 @@ domserver judgehost docs: paths.mk config
 install-domserver: domserver domserver-create-dirs
 install-judgehost: judgehost judgehost-create-dirs
 install-docs: docs-create-dirs
-dist: configure composer-dependencies composer-package-versions
+dist: configure composer-dependencies
 
 # Install PHP dependencies
 composer-dependencies:
@@ -61,10 +61,6 @@ endif
 
 composer-dependencies-dev:
 	composer $(subst 1,-q,$(QUIET)) install --prefer-dist --no-scripts
-
-# Write composer version information, needed for Doctrine migrations
-composer-package-versions:
-	composer $(subst 1,-q,$(QUIET)) run-script package-versions-dump
 
 # Generate documentation for distribution. Remove this dependency from
 # dist above for quicker building from git sources.
@@ -81,17 +77,17 @@ build-scripts:
 	$(MAKE) -C sql build-scripts
 
 # List of SUBDIRS for recursive targets:
-build:             SUBDIRS=        lib                      import tests misc-tools
-domserver:         SUBDIRS=etc         sql                  import       misc-tools webapp
-install-domserver: SUBDIRS=etc     lib sql                  import       misc-tools webapp
-judgehost:         SUBDIRS=etc                 judge                     misc-tools
-install-judgehost: SUBDIRS=etc     lib         judge                     misc-tools
+build:             SUBDIRS=        lib                      tests misc-tools
+domserver:         SUBDIRS=etc         sql                        misc-tools webapp
+install-domserver: SUBDIRS=etc     lib sql                        misc-tools webapp
+judgehost:         SUBDIRS=etc                 judge              misc-tools
+install-judgehost: SUBDIRS=etc     lib         judge              misc-tools
 docs:              SUBDIRS=    doc
 install-docs:      SUBDIRS=    doc
-dist:              SUBDIRS=        lib sql                               misc-tools
-clean:             SUBDIRS=etc doc lib sql     judge submit        tests misc-tools webapp
-distclean:         SUBDIRS=etc doc lib sql     judge submit import tests misc-tools webapp
-maintainer-clean:  SUBDIRS=etc doc lib sql     judge submit import tests misc-tools webapp
+dist:              SUBDIRS=        lib sql                        misc-tools
+clean:             SUBDIRS=etc doc lib sql     judge submit tests misc-tools webapp
+distclean:         SUBDIRS=etc doc lib sql     judge submit tests misc-tools webapp
+maintainer-clean:  SUBDIRS=etc doc lib sql     judge submit tests misc-tools webapp
 
 domserver-create-dirs:
 	$(INSTALL_DIR) $(addprefix $(DESTDIR),$(domserver_dirs))
@@ -175,8 +171,9 @@ paths.mk:
 MAINT_CXFLAGS=-g -O1 -Wall -fstack-protector -D_FORTIFY_SOURCE=2 \
               -fPIE -Wformat -Wformat-security -pedantic
 MAINT_LDFLAGS=-fPIE -pie -Wl,-z,relro -Wl,-z,now
-maintainer-conf: inplace-conf composer-dependencies-dev webapp/.env.local
-inplace-conf: dist
+maintainer-conf: inplace-conf-common composer-dependencies-dev webapp/.env.local
+inplace-conf: inplace-conf-common composer-dependencies
+inplace-conf-common: dist
 	./configure $(subst 1,-q,$(QUIET)) --prefix=$(CURDIR) \
 	            --with-domserver_root=$(CURDIR) \
 	            --with-judgehost_root=$(CURDIR) \
@@ -322,7 +319,7 @@ clean-autoconf:
 	-rm -rf config.status config.cache config.log autom4te.cache
 
 .PHONY: $(addsuffix -create-dirs,domserver judgehost docs) check-root \
-        clean-autoconf $(addprefix inplace-,conf install uninstall) \
-        maintainer-conf config distdocs composer-dependencies \
-        composer-dependencies-dev \
+        $(addprefix inplace-,conf conf-common install uninstall) \
+        $(addprefix maintainer-,conf install) clean-autoconf config distdocs \
+        composer-dependencies composer-dependencies-dev \
         coverity-conf coverity-build

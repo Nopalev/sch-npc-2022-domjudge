@@ -5,7 +5,6 @@ namespace App\Controller\API;
 use App\Entity\Language;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use Nelmio\ApiDocBundle\Annotation\Model;
 use OpenApi\Annotations as OA;
@@ -23,7 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
 class LanguageController extends AbstractRestController
 {
     /**
-     * Get all the languages for this contest
+     * Get all the languages for this contest.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -37,13 +36,13 @@ class LanguageController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/strict")
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : Response
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given language for this contest
+     * Get the given language for this contest.
      * @throws NonUniqueResultException
      * @Rest\Get("/{id}")
      * @OA\Response(
@@ -54,7 +53,7 @@ class LanguageController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/id")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $id) : Response
+    public function singleAction(Request $request, string $id): Response
     {
         return parent::performSingleAction($request, $id);
     }
@@ -62,7 +61,7 @@ class LanguageController extends AbstractRestController
     protected function getQueryBuilder(Request $request): QueryBuilder
     {
         // Make sure the contest exists by calling getContestId. Most API endpoints use the contest to filter its
-        // queries, but the languages endpoint does not. So we just call it here
+        // queries, but the languages endpoint does not. So we just call it here.
         $this->getContestId($request);
         return $this->em->createQueryBuilder()
             ->from(Language::class, 'lang')
@@ -70,9 +69,6 @@ class LanguageController extends AbstractRestController
             ->andWhere('lang.allowSubmit = 1');
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('lang.%s', $this->eventLogService->externalIdFieldForEntity(Language::class) ?? 'langid');

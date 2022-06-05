@@ -7,7 +7,6 @@ use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use App\Service\EventLogService;
 use App\Utils\Utils;
-use Exception;
 use JMS\Serializer\EventDispatcher\Events;
 use JMS\Serializer\EventDispatcher\EventSubscriberInterface;
 use JMS\Serializer\EventDispatcher\ObjectEvent;
@@ -17,25 +16,10 @@ use Symfony\Component\HttpFoundation\RequestStack;
 
 class TeamAffiliationVisitor implements EventSubscriberInterface
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
-
-    /**
-     * @var RequestStack
-     */
-    protected $requestStack;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
+    protected RequestStack $requestStack;
 
     public function __construct(
         DOMJudgeService $dj,
@@ -61,12 +45,7 @@ class TeamAffiliationVisitor implements EventSubscriberInterface
         ];
     }
 
-    /**
-     * @param ObjectEvent $event
-     *
-     * @throws Exception
-     */
-    public function onPostSerialize(ObjectEvent $event)
+    public function onPostSerialize(ObjectEvent $event): void
     {
         /** @var JsonSerializationVisitor $visitor */
         $visitor = $event->getVisitor();

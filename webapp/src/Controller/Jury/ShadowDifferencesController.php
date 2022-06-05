@@ -14,10 +14,9 @@ use App\Entity\Submission;
 use App\Service\DOMJudgeService;
 use App\Service\SubmissionService;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
@@ -26,52 +25,32 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class ShadowDifferencesController extends BaseController
 {
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var SubmissionService
-     */
-    protected $submissions;
-
-    /**
-     * @var SessionInterface
-     */
-    protected $session;
-
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected SubmissionService $submissions;
+    protected RequestStack $requestStack;
+    protected EntityManagerInterface $em;
 
     public function __construct(
         DOMJudgeService $dj,
         ConfigurationService $config,
         SubmissionService $submissions,
-        SessionInterface $session,
+        RequestStack $requestStack,
         EntityManagerInterface $em
     ) {
-        $this->dj          = $dj;
-        $this->config      = $config;
-        $this->submissions = $submissions;
-        $this->session     = $session;
-        $this->em          = $em;
+        $this->dj           = $dj;
+        $this->config       = $config;
+        $this->submissions  = $submissions;
+        $this->requestStack = $requestStack;
+        $this->em           = $em;
     }
 
     /**
      * @Route("", name="jury_shadow_differences")
-     * @return RedirectResponse|Response
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function indexAction(Request $request)
+    public function indexAction(Request $request): Response
     {
         $shadowMode = DOMJudgeService::DATA_SOURCE_CONFIGURATION_AND_LIVE_EXTERNAL;
         $dataSource = $this->config->get('data_source');
@@ -88,8 +67,8 @@ class ShadowDifferencesController extends BaseController
             return $this->redirectToRoute('jury_index');
         }
 
-        // Close the session, as this might take a while and we don't need the session below
-        $this->session->save();
+        // Close the session, as this might take a while and we don't need the session below.
+        $this->requestStack->getSession()->save();
 
         $contest        = $this->dj->getCurrentContest();
         $verdictsConfig = $this->dj->getDomjudgeEtcDir() . '/verdicts.php';
@@ -101,7 +80,7 @@ class ShadowDifferencesController extends BaseController
 
         $used         = [];
         $verdictTable = [];
-        // pre-fill $verdictTable to get a consistent ordering
+        // Pre-fill $verdictTable to get a consistent ordering.
         foreach ($verdicts as $verdict => $abbrev) {
             foreach ($verdicts as $verdict2 => $abbrev2) {
                 $verdictTable[$verdict][$verdict2] = [];
@@ -116,26 +95,26 @@ class ShadowDifferencesController extends BaseController
             ->select('s', 'ej', 'j')
             ->andWhere('s.contest = :contest')
             ->andWhere('s.externalid IS NOT NULL')
-            ->setParameter(':contest', $contest)
+            ->setParameter('contest', $contest)
             ->getQuery()
             ->getResult();
 
-        // Helper function to add verdicts
+        // Helper function to add verdicts.
         $addVerdict = function ($unknownVerdict) use ($verdicts, &$verdictTable) {
-            // add column to existing rows
+            // Add column to existing rows.
             foreach ($verdicts as $verdict => $abbreviation) {
                 $verdictTable[$verdict][$unknownVerdict] = [];
             }
-            // add verdict to known verdicts
+            // Add verdict to known verdicts.
             $verdicts[$unknownVerdict] = $unknownVerdict;
-            // add row
+            // Add row.
             $verdictTable[$unknownVerdict] = [];
             foreach ($verdicts as $verdict => $abbreviation) {
                 $verdictTable[$unknownVerdict][$verdict] = [];
             }
         };
 
-        // Build up the verdict matrix
+        // Build up the verdict matrix.
         foreach ($submissions as $submitid => $submission) {
             /** @var ExternalJudgement|null $externalJudgement */
             $externalJudgement = $submission->getExternalJudgements()->first();
@@ -154,18 +133,18 @@ class ShadowDifferencesController extends BaseController
                 $externalResult = 'judging';
             }
 
-            // add verdicts to data structures if they are unknown up to now
+            // Add verdicts to data structures if they are unknown up to now.
             foreach ([$externalResult, $localResult] as $result) {
                 if (!array_key_exists($result, $verdicts)) {
                     $addVerdict($result);
                 }
             }
 
-            // mark them as used, so we can filter out unused cols/rows later
+            // Mark them as used, so we can filter out unused cols/rows later.
             $used[$externalResult] = true;
             $used[$localResult]    = true;
 
-            // append submitid to list of orig->new verdicts
+            // Append submitid to list of orig->new verdicts.
             $verdictTable[$externalResult][$localResult][] = $submitid;
         }
 

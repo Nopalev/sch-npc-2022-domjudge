@@ -7,15 +7,12 @@ use Doctrine\Persistence\ObjectManager;
 
 class JudgehostFixture extends AbstractExampleDataFixture
 {
-    /**
-     * @inheritDoc
-     */
-    public function load(ObjectManager $manager)
+    public function load(ObjectManager $manager): void
     {
         $judgehost = new Judgehost();
         $judgehost
             ->setHostname('example-judgehost1')
-            ->setActive(false);
+            ->setEnabled(false);
 
         $manager->persist($judgehost);
         $manager->flush();

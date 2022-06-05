@@ -24,26 +24,14 @@ use Symfony\Component\Validator\Constraints\Regex;
 
 class RejudgingType extends AbstractType
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
 
-    /**
-     * RejudgingType constructor.
-     * @param EntityManagerInterface $em
-     */
     public function __construct(EntityManagerInterface $em)
     {
         $this->em = $em;
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     * @throws \Exception
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('reason', TextType::class);
         $builder->add('priority', ChoiceType::class,
@@ -67,12 +55,10 @@ class RejudgingType extends AbstractType
             'required' => false,
             'multiple' => true,
             'choice_label' => 'name',
-            'query_builder' => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder('c')
-                    ->where('c.enabled = 1')
-                    ->orderBy('c.cid');
-            },
+            'query_builder' => fn(EntityRepository $er) => $er
+                ->createQueryBuilder('c')
+                ->where('c.enabled = 1')
+                ->orderBy('c.cid'),
         ]);
         $builder->add('problems', EntityType::class, [
             'multiple' => true,
@@ -88,12 +74,10 @@ class RejudgingType extends AbstractType
             'class' => Language::class,
             'required' => false,
             'choice_label' => 'name',
-            'query_builder' => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder('l')
-                    ->where('l.allowSubmit = 1')
-                    ->orderBy('l.name');
-            },
+            'query_builder' => fn(EntityRepository $er) => $er
+                ->createQueryBuilder('l')
+                ->where('l.allowSubmit = 1')
+                ->orderBy('l.name'),
         ]);
         $builder->add('teams', EntityType::class, [
             'multiple' => true,
@@ -109,12 +93,10 @@ class RejudgingType extends AbstractType
             'required' => false,
             'multiple' => true,
             'choice_label' => 'name',
-            'query_builder' => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder('u')
-                    ->where('u.enabled = 1')
-                    ->orderBy('u.name');
-            },
+            'query_builder' => fn(EntityRepository $er) => $er
+                ->createQueryBuilder('u')
+                ->where('u.enabled = 1')
+                ->orderBy('u.name'),
         ]);
         $builder->add('judgehosts', EntityType::class, [
             'multiple' => true,
@@ -122,11 +104,9 @@ class RejudgingType extends AbstractType
             'class' => Judgehost::class,
             'required' => false,
             'choice_label' => 'hostname',
-            'query_builder' => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder('j')
-                    ->orderBy('j.hostname');
-            },
+            'query_builder' => fn(EntityRepository $er) => $er
+                ->createQueryBuilder('j')
+                ->orderBy('j.hostname'),
         ]);
 
         $verdicts = [
@@ -172,7 +152,7 @@ class RejudgingType extends AbstractType
                 ->join('p.contest_problems', 'cp')
                 ->select('p')
                 ->andWhere('cp.contest IN (:contests)')
-                ->setParameter(':contests', $contests)
+                ->setParameter('contests', $contests)
                 ->addOrderBy('p.name')
                 ->getQuery()
                 ->getResult();
@@ -206,7 +186,7 @@ class RejudgingType extends AbstractType
                     ->join('t.category', 'cat')
                     ->leftJoin('cat.contests', 'cc')
                     ->andWhere('c IN (:contests) OR cc IN (:contests)')
-                    ->setParameter(':contests', $contests);
+                    ->setParameter('contests', $contests);
             }
 
             $teams = $teamsQueryBuilder->getQuery()->getResult();

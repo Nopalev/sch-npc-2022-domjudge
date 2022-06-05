@@ -74,9 +74,11 @@ section_end scrape
 if [ "$TEST" = "w3cval" ]; then
     section_start_collap upstream_problems "Remove files from upstream with problems"
     rm -rf localhost/domjudge/doc
+    rm -rf localhost/domjudge/css/fontawesome-all.min.css*
     rm -rf localhost/domjudge/bundles/nelmioapidoc*
     rm -f localhost/domjudge/css/bootstrap.min.css*
     rm -f localhost/domjudge/css/select2-bootstrap.min.css*
+    rm -f localhost/domjudge/jury/config/check/phpinfo*
     section_end upstream_problems
 
     section_start_collap test_suite "Install testsuite"
@@ -84,12 +86,9 @@ if [ "$TEST" = "w3cval" ]; then
     wget https://github.com/validator/validator/releases/latest/download/vnu.linux.zip
     unzip -q vnu.linux.zip
     section_end test_suite
-    FLTRALL='--filterpattern .*autocomplete.*|.*descendant.*|.*child.*'
-    FLTRJURY='|.*form.*|.*scope.*'
-    if [ "$ROLE" = jury ]; then
-        FLTR="$FLTRALL|$FLTRJURY"
-    elif [ "$ROLE" = admin ]; then
-        FLTR="$FLTRALL|$FLTRJURY|.*tab.*|.*non-void.*|.*CSS.*|.*child.*|.*doctype.*|.*option.*|.*maxlength.*|.*ID.*"
+    FLTRALL='--filterpattern .*autocomplete.*|.*child.*'
+    if [ "$ROLE" = admin ]; then
+        FLTR="$FLTRALL|.*option.*|.*non-hidden.*"
     else
         FLTR="$FLTRALL"
     fi

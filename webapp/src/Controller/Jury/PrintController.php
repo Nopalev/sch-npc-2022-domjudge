@@ -8,7 +8,6 @@ use App\Form\Type\PrintType;
 use App\Service\ConfigurationService;
 use App\Service\DOMJudgeService;
 use Doctrine\ORM\EntityManagerInterface;
-use Exception;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Security;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
@@ -26,20 +25,9 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class PrintController extends BaseController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -53,9 +41,8 @@ class PrintController extends BaseController
 
     /**
      * @Route("", name="jury_print")
-     * @throws Exception
      */
-    public function showAction(Request $request) : Response
+    public function showAction(Request $request): Response
     {
         if (!$this->config->get('print_command')) {
             throw new AccessDeniedHttpException("Printing disabled in config");

@@ -16,7 +16,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\QueryBuilder;
-use Exception;
 use FOS\RestBundle\Controller\Annotations as Rest;
 use JMS\Serializer\Metadata\PropertyMetadata;
 use Metadata\MetadataFactoryInterface;
@@ -41,19 +40,11 @@ use Symfony\Component\Yaml\Yaml;
  * @OA\Tag(name="Contests")
  * @OA\Response(response="404", ref="#/components/responses/NotFound")
  * @OA\Response(response="401", ref="#/components/responses/Unauthorized")
- * @OA\Response(response="400", ref="#/components/responses/InvalidResponse")
  */
 class ContestController extends AbstractRestController
 {
-    /**
-     * @var ImportExportService
-     */
-    protected $importExportService;
-
-    /**
-     * @var AssetUpdateService
-     */
-    protected $assetUpdater;
+    protected ImportExportService $importExportService;
+    protected AssetUpdateService $assetUpdater;
 
     public function __construct(
         EntityManagerInterface $entityManager,
@@ -99,7 +90,7 @@ class ContestController extends AbstractRestController
      * )
      * @throws BadRequestHttpException
      */
-    public function addContestAction(Request $request) : string
+    public function addContestAction(Request $request): string
     {
         /** @var UploadedFile $yamlFile */
         $yamlFile = $request->files->get('yaml') ?: [];
@@ -115,7 +106,7 @@ class ContestController extends AbstractRestController
                 return $cid;
             }
         } elseif ($jsonFile) {
-            $data = json_decode(file_get_contents($jsonFile->getRealPath()), true);
+            $data = $this->dj->jsonDecode(file_get_contents($jsonFile->getRealPath()));
             if ($this->importExportService->importContestData($data, $message, $cid)) {
                 return $cid;
             }
@@ -124,7 +115,7 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Get all the contests
+     * Get all the contests.
      * @Rest\Get("")
      * @OA\Response(
      *     response="200",
@@ -149,13 +140,13 @@ class ContestController extends AbstractRestController
      * )
      * @throws NonUniqueResultException
      */
-    public function listAction(Request $request) : Response
+    public function listAction(Request $request): Response
     {
         return parent::performListAction($request);
     }
 
     /**
-     * Get the given contest
+     * Get the given contest.
      * @throws NonUniqueResultException
      * @Rest\Get("/{cid}")
      * @OA\Response(
@@ -171,13 +162,13 @@ class ContestController extends AbstractRestController
      * @OA\Parameter(ref="#/components/parameters/cid")
      * @OA\Parameter(ref="#/components/parameters/strict")
      */
-    public function singleAction(Request $request, string $cid) : Response
+    public function singleAction(Request $request, string $cid): Response
     {
         return parent::performSingleAction($request, $cid);
     }
 
     /**
-     * Get the banner for the given contest
+     * Get the banner for the given contest.
      * @Rest\Get("/{id}/banner", name="contest_banner")
      * @OA\Response(
      *     response="200",
@@ -193,7 +184,7 @@ class ContestController extends AbstractRestController
         /** @var Contest $contest */
         $contest = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -211,7 +202,7 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Delete the banner for the given contest
+     * Delete the banner for the given contest.
      * @Rest\Delete("/{id}/banner", name="delete_contest_banner")
      * @IsGranted("ROLE_ADMIN")
      * @OA\Response(response="204", description="Deleting banner succeeded")
@@ -222,7 +213,7 @@ class ContestController extends AbstractRestController
         /** @var Contest $contest */
         $contest = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -240,7 +231,7 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Set the banner for the given contest
+     * Set the banner for the given contest.
      * @Rest\POST("/{id}/banner", name="post_contest_banner")
      * @Rest\PUT("/{id}/banner", name="put_contest_banner")
      * @OA\RequestBody(
@@ -259,7 +250,6 @@ class ContestController extends AbstractRestController
      *     )
      * )
      * @IsGranted("ROLE_ADMIN")
-     * @OA\Response(response="400", description="Invalid data provided")
      * @OA\Response(response="204", description="Setting banner succeeded")
      * @OA\Parameter(ref="#/components/parameters/id")
      */
@@ -268,7 +258,7 @@ class ContestController extends AbstractRestController
         /** @var Contest $contest */
         $contest = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id)
+            ->setParameter('id', $id)
             ->getQuery()
             ->getOneOrNullResult();
 
@@ -297,11 +287,10 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Change the start time of the given contest
+     * Change the start time of the given contest.
      * @Rest\Patch("/{cid}")
      * @IsGranted("ROLE_API_WRITER")
      * @throws NonUniqueResultException
-     * @throws Exception
      * @OA\Parameter(
      *     name="cid",
      *     in="path",
@@ -337,7 +326,7 @@ class ContestController extends AbstractRestController
      *     description="Changing start time not allowed"
      * )
      */
-    public function changeStartTimeAction(Request $request, string $cid) : Response
+    public function changeStartTimeAction(Request $request, string $cid): Response
     {
         $contest  = $this->getContestWithId($request, $cid);
         $now      = Utils::now();
@@ -391,10 +380,9 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Get the contest in YAML format
+     * Get the contest in YAML format.
      * @Rest\Get("/{cid}/contest-yaml")
      * @throws NonUniqueResultException
-     * @throws Exception
      * @OA\Parameter(ref="#/components/parameters/cid")
      * @OA\Response(
      *     response="200",
@@ -402,7 +390,7 @@ class ContestController extends AbstractRestController
      *     @OA\MediaType(mediaType="application/x-yaml")
      * )
      */
-    public function getContestYamlAction(Request $request, string $cid) : StreamedResponse
+    public function getContestYamlAction(Request $request, string $cid): StreamedResponse
     {
         $contest      = $this->getContestWithId($request, $cid);
         $penalty_time = $this->config->get('penalty_time');
@@ -438,7 +426,7 @@ class ContestController extends AbstractRestController
      *     @OA\JsonContent(ref="#/components/schemas/ContestState")
      * )
      */
-    public function getContestStateAction(Request $request, string $cid) : ?array
+    public function getContestStateAction(Request $request, string $cid): ?array
     {
         $contest         = $this->getContestWithId($request, $cid);
         $inactiveAllowed = $this->isGranted('ROLE_API_READER');
@@ -450,11 +438,10 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Get the event feed for the given contest
+     * Get the event feed for the given contest.
      * @Rest\Get("/{cid}/event-feed")
      * @OA\Get()
      * @Security("is_granted('ROLE_JURY') or is_granted('ROLE_API_READER')")
-     * @return Response|StreamedResponse
      * @throws NonUniqueResultException
      * @OA\Parameter(ref="#/components/parameters/cid")
      * @OA\Parameter(
@@ -505,7 +492,7 @@ class ContestController extends AbstractRestController
         string $cid,
         MetadataFactoryInterface $metadataFactory,
         KernelInterface $kernel
-    ) {
+    ): Response {
         $contest = $this->getContestWithId($request, $cid);
         // Make sure this script doesn't hit the PHP maximum execution timeout.
         set_time_limit(0);
@@ -579,15 +566,18 @@ class ContestController extends AbstractRestController
                 // entity, not the ContestProblem entity, so the above loop will not
                 // detect it.
                 $skippedProperties['problems'][] = 'externalid';
+
+                // Users are called accounts.
+                $skippedProperties['accounts'] = $skippedProperties['users'];
             }
 
-            // Initialize all static events
+            // Initialize all static events.
             $this->eventLogService->initStaticEvents($contest);
-            // Reload the contest as the above method will clear the entity manager
+            // Reload the contest as the above method will clear the entity manager.
             $contest = $this->getContestWithId($request, $cid);
 
             while (true) {
-                // Add missing state events that should have happened already
+                // Add missing state events that should have happened already.
                 $this->eventLogService->addMissingStateEvents($contest);
 
                 $qb = $this->em->createQueryBuilder()
@@ -602,7 +592,7 @@ class ContestController extends AbstractRestController
                 if ($typeFilter !== false) {
                     $qb = $qb
                         ->andWhere('e.endpointtype IN (:types)')
-                        ->setParameter(':types', $typeFilter);
+                        ->setParameter('types', $typeFilter);
                 }
                 if (!$canViewAll) {
                     $restricted_types = ['judgements', 'runs', 'clarifications'];
@@ -611,7 +601,7 @@ class ContestController extends AbstractRestController
                     }
                     $qb = $qb
                         ->andWhere('e.endpointtype NOT IN (:restricted_types)')
-                        ->setParameter(':restricted_types', $restricted_types);
+                        ->setParameter('restricted_types', $restricted_types);
                 }
 
                 $q = $qb->getQuery();
@@ -645,7 +635,7 @@ class ContestController extends AbstractRestController
                     if (!$strict) {
                         $result['time'] = Utils::absTime($event->getEventtime());
                     }
-                    echo json_encode($result, JSON_PRESERVE_ZERO_FRACTION | JSON_UNESCAPED_SLASHES) . "\n";
+                    echo $this->dj->jsonEncode($result) . "\n";
                     ob_flush();
                     flush();
                     $lastUpdate = Utils::now();
@@ -675,7 +665,7 @@ class ContestController extends AbstractRestController
     }
 
     /**
-     * Get general status information
+     * Get general status information.
      * @Rest\Get("/{cid}/status")
      * @IsGranted("ROLE_API_READER")
      * @OA\Parameter(ref="#/components/parameters/cid")
@@ -692,7 +682,7 @@ class ContestController extends AbstractRestController
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function getStatusAction(Request $request, string $cid) : array
+    public function getStatusAction(Request $request, string $cid): array
     {
         return $this->dj->getContestStats($this->getContestWithId($request, $cid));
     }
@@ -702,23 +692,20 @@ class ContestController extends AbstractRestController
         return $this->getContestQueryBuilder($request->query->getBoolean('onlyActive', false));
     }
 
-    /**
-     * @throws Exception
-     */
     protected function getIdField(): string
     {
         return sprintf('c.%s', $this->eventLogService->externalIdFieldForEntity(Contest::class) ?? 'cid');
     }
 
     /**
-     * Get the contest with the given ID
+     * Get the contest with the given ID.
      * @throws NonUniqueResultException
      */
     protected function getContestWithId(Request $request, string $id): Contest
     {
         $queryBuilder = $this->getQueryBuilder($request)
             ->andWhere(sprintf('%s = :id', $this->getIdField()))
-            ->setParameter(':id', $id);
+            ->setParameter('id', $id);
 
         $contest = $queryBuilder->getQuery()->getOneOrNullResult();
 

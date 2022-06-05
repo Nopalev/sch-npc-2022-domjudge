@@ -13,10 +13,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\Pagination\Paginator;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\IsGranted;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\Asset\Packages;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\Routing\Annotation\Route;
 
 /**
@@ -25,25 +23,10 @@ use Symfony\Component\Routing\Annotation\Route;
  */
 class AuditLogController extends AbstractController
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
-
-    /**
-     * @var DOMJudgeService
-     */
-    protected $dj;
-
-    /**
-     * @var ConfigurationService
-     */
-    protected $config;
-
-    /**
-     * @var EventLogService
-     */
-    protected $eventLogService;
+    protected EntityManagerInterface $em;
+    protected DOMJudgeService $dj;
+    protected ConfigurationService $config;
+    protected EventLogService $eventLogService;
 
     public function __construct(
         EntityManagerInterface $em,
@@ -60,7 +43,7 @@ class AuditLogController extends AbstractController
     /**
      * @Route("", name="jury_auditlog")
      */
-    public function indexAction(Request $request, Packages $assetPackage, KernelInterface $kernel): Response
+    public function indexAction(Request $request): Response
     {
         $timeFormat = (string)$this->config->get('time_format');
 
@@ -87,7 +70,7 @@ class AuditLogController extends AbstractController
 
             $time = $logline->getLogTime();
             $data['when']['value'] = Utils::printtime($time, $timeFormat);
-            $data['when']['title'] = Utils::printtime($time, "%Y-%m-%d %H:%M:%S (%Z)");
+            $data['when']['title'] = Utils::printtime($time, "Y-m-d H:i:s (T)");
             $data['when']['sortvalue'] = $time;
 
             $data['who']['value'] = $logline->getUser();
@@ -177,7 +160,7 @@ class AuditLogController extends AbstractController
             case 'team_category':
                 return $this->generateUrl('jury_team_category', ['categoryId' => $id]);
             case 'user':
-                // Pre 6.1, usernames were stored instead of numeric ids
+                // Pre 6.1, usernames were stored instead of numeric IDs.
                 if (!is_numeric($id)) {
                     $user = $this->em->getRepository(User::class)->findOneBy(['username'=>$id]);
                     $id = $user->getUserId();

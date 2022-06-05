@@ -2,48 +2,27 @@
 
 namespace App\Form\Type;
 
-use App\Entity\Contest;
-use App\Entity\Judgehost;
 use App\Entity\Language;
 use App\Entity\Problem;
 use App\Entity\Team;
-use App\Entity\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
-use Symfony\Component\Form\Extension\Core\Type\IntegerType;
 use Symfony\Component\Form\Extension\Core\Type\ButtonType;
-use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
-use Symfony\Component\Form\FormEvent;
-use Symfony\Component\Form\FormEvents;
-use Symfony\Component\Form\FormInterface;
-use Symfony\Component\Validator\Constraints\Regex;
 
 class SubmissionsFilterType extends AbstractType
 {
-    /**
-     * @var EntityManagerInterface
-     */
-    protected $em;
+    protected EntityManagerInterface $em;
 
-    /**
-     * RejudgingType constructor.
-     * @param EntityManagerInterface $em
-     */
     public function __construct(EntityManagerInterface $em)
     {
         $this->em = $em;
     }
 
-    /**
-     * @param FormBuilderInterface $builder
-     * @param array                $options
-     * @throws \Exception
-     */
-    public function buildForm(FormBuilderInterface $builder, array $options)
+    public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $contests = $builder->getData()["contests"];
 
@@ -57,7 +36,7 @@ class SubmissionsFilterType extends AbstractType
             ->addOrderBy("p.name")
             ->getQuery()
             ->getResult();
-        $builder->add("problem", EntityType::class, [
+        $builder->add("problem-id", EntityType::class, [
             "multiple" => true,
             "label" => "Filter on problem(s)",
             "class" => Problem::class,
@@ -66,18 +45,16 @@ class SubmissionsFilterType extends AbstractType
             "choices" => $problems,
             "attr" => ["data-filter-field" => "problem-id"],
         ]);
-        $builder->add("language", EntityType::class, [
+        $builder->add("language-id", EntityType::class, [
             "multiple" => true,
             "label" => "Filter on language(s)",
             "class" => Language::class,
             "required" => false,
             "choice_label" => "name",
-            "query_builder" => function (EntityRepository $er) {
-                return $er
-                    ->createQueryBuilder("l")
-                    ->where("l.allowSubmit = 1")
-                    ->orderBy("l.name");
-            },
+            "query_builder" => fn(EntityRepository $er) => $er
+                ->createQueryBuilder("l")
+                ->where("l.allowSubmit = 1")
+                ->orderBy("l.name"),
             "attr" => ["data-filter-field" => "language-id"],
         ]);
 
@@ -106,7 +83,7 @@ class SubmissionsFilterType extends AbstractType
         }
 
         $teams = $teamsQueryBuilder->getQuery()->getResult();
-        $builder->add("team", EntityType::class, [
+        $builder->add("team-id", EntityType::class, [
             "multiple" => true,
             "label" => "Filter on team(s)",
             "class" => Team::class,
@@ -126,7 +103,7 @@ class SubmissionsFilterType extends AbstractType
             "judging",
             "queued",
         ];
-        $builder->add("verdict", ChoiceType::class, [
+        $builder->add("result", ChoiceType::class, [
             "label" => "Filter on result(s)",
             "multiple" => true,
             "required" => false,

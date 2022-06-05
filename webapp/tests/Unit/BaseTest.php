@@ -14,11 +14,9 @@ use Doctrine\ORM\EntityManagerInterface;
 use Exception;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
-use Symfony\Component\BrowserKit\Cookie;
 use Symfony\Component\DomCrawler\Crawler;
 use Symfony\Component\DomCrawler\Link;
 use Symfony\Component\PropertyAccess\PropertyAccess;
-use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use ZipArchive;
 
 /**
@@ -28,21 +26,13 @@ use ZipArchive;
  */
 abstract class BaseTest extends WebTestCase
 {
-    /** @var KernelBrowser */
-    protected $client;
+    protected KernelBrowser $client;
 
     /** @var string[] */
-    protected $roles = [];
-
-    /** @var ORMExecutor */
-    protected $fixtureExecutor;
-
-    /**
-     * What fixtures to load.
-     *
-     * @var string[]
-     */
-    protected static $fixtures = [];
+    protected array        $roles           = [];
+    protected ?ORMExecutor $fixtureExecutor = null;
+    /** @var string[] */
+    protected static array $fixtures = [];
 
     protected function setUp(): void
     {
@@ -64,13 +54,11 @@ abstract class BaseTest extends WebTestCase
 
     /**
      * Load the given fixtures.
-     *
-     * @throws Exception
      */
-    protected function loadFixtures(array $fixtures)
+    protected function loadFixtures(array $fixtures): void
     {
         if ($this->fixtureExecutor === null) {
-            $this->fixtureExecutor = new ORMExecutor(static::$container->get(EntityManagerInterface::class));
+            $this->fixtureExecutor = new ORMExecutor(static::getContainer()->get(EntityManagerInterface::class));
         }
 
         $loader = new Loader();
@@ -86,10 +74,8 @@ abstract class BaseTest extends WebTestCase
 
     /**
      * Load the given fixture.
-     *
-     * @throws Exception
      */
-    protected function loadFixture(string $fixture)
+    protected function loadFixture(string $fixture): void
     {
         $this->loadFixtures([$fixture]);
     }
@@ -102,7 +88,7 @@ abstract class BaseTest extends WebTestCase
         // If the object ID contains a :, it is a reference to a fixture item, so get it.
         if (is_string($id) && strpos($id, ':') !== false) {
             $referenceObject = $this->fixtureExecutor->getReferenceRepository()->getReference($id);
-            $metadata = static::$container->get(EntityManagerInterface::class)->getClassMetadata(get_class($referenceObject));
+            $metadata = static::getContainer()->get(EntityManagerInterface::class)->getClassMetadata(get_class($referenceObject));
             $propertyAccessor = PropertyAccess::createPropertyAccessor();
             return $propertyAccessor->getValue($referenceObject, $metadata->getSingleIdentifierColumnName());
         }
@@ -123,14 +109,11 @@ abstract class BaseTest extends WebTestCase
         $message = var_export($response, true);
         self::assertEquals(200, $response->getStatusCode(), $message);
 
-        $csrf_token = $this->client->getContainer()->get('security.csrf.token_manager')->getToken('authenticate');
-
         // Submit form.
         $button = $crawler->selectButton('Sign in');
         $form = $button->form(array(
             '_username'   => $username,
             '_password'   => $password,
-            '_csrf_token' => $csrf_token,
         ));
         $this->client->followRedirects();
         $this->client->submit($form);
@@ -157,19 +140,7 @@ abstract class BaseTest extends WebTestCase
      */
     protected function logIn(): void
     {
-        $session = $this->client->getContainer()->get('session');
-
-        $firewallName = 'main';
-        $firewallContext = 'main';
-
-        $user = $this->setupUser();
-        $token = new UsernamePasswordToken($user, null, $firewallName,
-            $user->getRoles());
-        $session->set('_security_' . $firewallContext, serialize($token));
-        $session->save();
-
-        $cookie = new Cookie($session->getName(), $session->getId());
-        $this->client->getCookieJar()->set($cookie);
+        $this->client->loginUser($this->setupUser());
     }
 
     /**
@@ -180,7 +151,11 @@ abstract class BaseTest extends WebTestCase
      */
     protected function logOut(): void
     {
-        $session = $this->client->getContainer()->get('session');
+        if ($this->client->getContainer()->has('session.factory')) {
+            $session = $this->client->getContainer()->get('session.factory')->createSession();
+        } else {
+            $session = $this->client->getContainer()->get('session');
+        }
         $this->client->getCookieJar()->expire($session->getName());
     }
 
@@ -218,9 +193,9 @@ abstract class BaseTest extends WebTestCase
         $configValue,
         callable $callback
     ): void {
-        $config = self::$container->get(ConfigurationService::class);
-        $eventLog = self::$container->get(EventLogService::class);
-        $dj = self::$container->get(DOMJudgeService::class);
+        $config = self::getContainer()->get(ConfigurationService::class);
+        $eventLog = self::getContainer()->get(EventLogService::class);
+        $dj = self::getContainer()->get(DOMJudgeService::class);
 
         // Build up the data to set.
         $dataToSet = [$configKey => $configValue];
@@ -277,7 +252,7 @@ abstract class BaseTest extends WebTestCase
      */
     protected function dataSourceIsLocal(): bool
     {
-        $config = self::$container->get(ConfigurationService::class);
+        $config = self::getContainer()->get(ConfigurationService::class);
         $dataSource = $config->get('data_source');
         return $dataSource === DOMJudgeService::DATA_SOURCE_LOCAL;
     }
@@ -302,7 +277,7 @@ abstract class BaseTest extends WebTestCase
     protected function resolveEntityId(string $class, ?string $id): ?string
     {
         if ($id !== null && !$this->dataSourceIsLocal()) {
-            $entity = static::$container->get(EntityManagerInterface::class)->getRepository($class)->find($id);
+            $entity = static::getContainer()->get(EntityManagerInterface::class)->getRepository($class)->find($id);
             // If we can't find the entity, assume we use an invalid one.
             if ($entity === null) {
                 return $id;
@@ -320,7 +295,7 @@ abstract class BaseTest extends WebTestCase
     protected function unzipString(string $content): array
     {
         $zip = new ZipArchive();
-        $tempFilename = tempnam(static::$container->get(DOMJudgeService::class)->getDomjudgeTmpDir(), "domjudge-test-");
+        $tempFilename = tempnam(static::getContainer()->get(DOMJudgeService::class)->getDomjudgeTmpDir(), "domjudge-test-");
         file_put_contents($tempFilename, $content);
 
         $zip->open($tempFilename);
@@ -336,9 +311,11 @@ abstract class BaseTest extends WebTestCase
 
     protected function removeTestContainer(): void
     {
-        $container = __DIR__ . '/../../var/cache/test/srcApp_KernelTestDebugContainer.php';
+        self::ensureKernelShutdown();
+        $container = __DIR__ . '/../../var/cache/test/App_KernelTestDebugContainer.php';
         if (file_exists($container)) {
             unlink($container);
         }
+        self::bootKernel();
     }
 }

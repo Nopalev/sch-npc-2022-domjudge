@@ -10,11 +10,11 @@ use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class OrganizationControllerTest extends BaseTest
 {
-    protected $apiEndpoint = 'organizations';
+    protected ?string $apiEndpoint = 'organizations';
 
-    protected $expectedObjects = [
-        '1'                                      => [
-            'icpc_id'      => '1',
+    protected array $expectedObjects = [
+        '1'                                     => [
+            'icpc_id'      => null,
             'shortname'    => 'UU',
             'id'           => '1',
             'name'         => 'UU',
@@ -34,9 +34,10 @@ class OrganizationControllerTest extends BaseTest
                     'height' => 512,
                 ],
             ],
-            'logo' => null,
+            'logo'         => null,
         ],
         SampleAffiliationsFixture::class . ':0' => [
+            'icpc_id'      => '1234',
             'name'         => 'FAU',
             'formal_name'  => 'Friedrich-Alexander-Universität Erlangen-Nürnberg',
             'country'      => 'DEU',
@@ -56,6 +57,7 @@ class OrganizationControllerTest extends BaseTest
             ],
         ],
         SampleAffiliationsFixture::class . ':1' => [
+            'icpc_id'      => 'abc-icpc-id',
             'name'         => 'ABC',
             'formal_name'  => 'Affiliation without country',
             'country'      => null,
@@ -63,16 +65,16 @@ class OrganizationControllerTest extends BaseTest
         ],
     ];
 
-    protected $objectClassForExternalId = TeamAffiliation::class;
+    protected ?string $objectClassForExternalId = TeamAffiliation::class;
 
-    protected $expectedAbsent = ['4242', 'nonexistent'];
+    protected array $expectedAbsent = ['4242', 'nonexistent'];
 
-    protected static $fixtures = [SampleAffiliationsFixture::class];
+    protected static array $fixtures = [SampleAffiliationsFixture::class];
 
-    public function testList()
+    public function testList(): void
     {
         // Remove country and country flag if not enabled.
-        $showFlags = static::$container->get(ConfigurationService::class)->get('show_flags');
+        $showFlags = static::getContainer()->get(ConfigurationService::class)->get('show_flags');
         if (!$showFlags) {
             foreach ($this->expectedObjects as &$object) {
                 $object['country'] = null;
@@ -86,10 +88,10 @@ class OrganizationControllerTest extends BaseTest
     /**
      * @dataProvider provideSingle
      */
-    public function testSingle($id, array $expectedProperties)
+    public function testSingle($id, array $expectedProperties): void
     {
         // Remove country and country flag if not enabled.
-        $showFlags = static::$container->get(ConfigurationService::class)->get('show_flags');
+        $showFlags = static::getContainer()->get(ConfigurationService::class)->get('show_flags');
         if (!$showFlags) {
             $expectedProperties['country'] = null;
             $expectedProperties['country_flag'] = null;
@@ -100,7 +102,7 @@ class OrganizationControllerTest extends BaseTest
     /**
      * Test that when we disable showing country flags, the country and flag of an affiliation are not exposed.
      */
-    public function testCountryAbsentWhenDisabled()
+    public function testCountryAbsentWhenDisabled(): void
     {
         $this->withChangedConfiguration('show_flags', false, function () {
             $apiEndpoint = $this->apiEndpoint;

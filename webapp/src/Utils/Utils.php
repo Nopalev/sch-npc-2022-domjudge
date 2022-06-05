@@ -3,7 +3,6 @@ namespace App\Utils;
 
 use DateTime;
 use Doctrine\Inflector\InflectorFactory;
-use Exception;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -164,21 +163,23 @@ class Utils
 
     const GD_MISSING = 'Cannot import image: the PHP GD library is missing.';
 
+    const DAY_IN_SECONDS = 60*60*24;
+
     /**
-     * returns the milliseconds part of a time stamp truncated at three digits
+     * Returns the milliseconds part of a time stamp truncated at three digits.
      */
-    private static function getMillis(float $seconds) : string
+    private static function getMillis(float $seconds): string
     {
         return sprintf(".%03d", floor(1000 * $seconds - 1000 * floor($seconds)));
     }
 
     /**
-     * prints the absolute time as yyyy-mm-ddThh:mm:ss(.uuu)?[+-]zz(:mm)?
-     * (with millis if $floored is false)
+     * Prints the absolute time as yyyy-mm-ddThh:mm:ss(.uuu)?[+-]zz(:mm)?
+     * (with millis if $floored is false).
      */
-    public static function absTime($epoch, bool $floored = false) : ?string
+    public static function absTime($epoch, bool $floored = false): ?string
     {
-        if ($epoch===null) {
+        if ($epoch === null) {
             return null;
         }
         $millis = Utils::getMillis((float) $epoch);
@@ -188,10 +189,10 @@ class Utils
     }
 
     /**
-     * prints a time diff as relative time as (-)?(h)*h:mm:ss(.uuu)?
-     * (with millis if $floored is false)
+     * Prints a time diff as relative time as (-)?(h)*h:mm:ss(.uuu)?
+     * (with millis if $floored is false).
      */
-    public static function relTime(float $seconds, bool $floored = false) : string
+    public static function relTime(float $seconds, bool $floored = false): string
     {
         $sign = ($seconds < 0) ? '-' : '';
         $seconds = abs($seconds);
@@ -208,10 +209,8 @@ class Utils
      * optional fractional part). The original time string should be in one of
      * the formats understood by DateTime (e.g. an ISO 8601 date and time with
      * fractional seconds). Throws an exception if $time cannot be parsed.
-     *
-     * @throws Exception
      */
-    public static function toEpochFloat(string $time) : float
+    public static function toEpochFloat(string $time): float
     {
         $dt = new DateTime($time);
         return (float)sprintf('%d.%06d', $dt->getTimestamp(), $dt->format('u'));
@@ -222,7 +221,7 @@ class Utils
      * simulate MySQL UNIX_TIMESTAMP() function to create insert
      * queries that do not change when replicated later.
      */
-    public static function now() : float
+    public static function now(): float
     {
         return microtime(true);
     }
@@ -231,7 +230,7 @@ class Utils
      * Returns >0, =0, <0 when $time1 >, =, < $time2 respectively.
      * Returned value is time difference in seconds.
      */
-    public static function difftime(float $time1, float $time2) : float
+    public static function difftime(float $time1, float $time2): float
     {
         return $time1 - $time2;
     }
@@ -239,11 +238,8 @@ class Utils
     /**
      * Calculate the difference between two HH:MM:SS strings and output again in that format.
      * Assumes that $time1 >= $time2.
-     * @param string $time1
-     * @param string $time2
-     * @return string
      */
-    public static function timeStringDiff(string $time1, string $time2) : string
+    public static function timeStringDiff(string $time1, string $time2): string
     {
         // Add 00: to both times if they only contain one :. This might be the case if we have no hours
         if (count(explode(':', $time1)) == 2) {
@@ -267,11 +263,9 @@ class Utils
     }
 
     /**
-     * Convert the given color to a hex value
-     * @param string $color
-     * @return string|null
+     * Convert the given color to a hex value.
      */
-    public static function convertToHex(string $color) : ?string
+    public static function convertToHex(string $color): ?string
     {
         if (preg_match('/^#[[:xdigit:]]{3,6}$/', $color)) {
             return $color;
@@ -285,11 +279,9 @@ class Utils
     }
 
     /**
-     * Convert the given hex color to the best matching string representation
-     * @param string $hex
-     * @return string|null
+     * Convert the given hex color to the best matching string representation.
      */
-    public static function convertToColor(string $hex) : ?string
+    public static function convertToColor(string $hex): ?string
     {
         if (!preg_match('/^#[[:xdigit:]]{3,6}$/', $hex)) {
             return $hex;
@@ -328,7 +320,7 @@ class Utils
     }
 
     /**
-     * Parse a hex color into it's three RGB values
+     * Parse a hex color into it's three RGB values.
      */
     public static function parseHexColor(string $hex): array
     {
@@ -343,7 +335,7 @@ class Utils
     }
 
     /**
-     * Comvert an RGB component to its hex value
+     * Comvert an RGB component to its hex value.
      */
     public static function componentToHex(int $component): string
     {
@@ -352,7 +344,7 @@ class Utils
     }
 
     /**
-     * Convert an RGB triple into a CSS hex color
+     * Convert an RGB triple into a CSS hex color.
      */
     public static function rgbToHex(array $color): string
     {
@@ -360,12 +352,9 @@ class Utils
     }
 
     /**
-     * Return a rounded float
-     * @param float|null $value
-     * @param int $decimals
-     * @return float|null
+     * Return a rounded float.
      */
-    public static function roundedFloat(float $value = null, int $decimals = 3) : ?float
+    public static function roundedFloat(?float $value = null, int $decimals = 3): ?float
     {
         if (is_null($value)) {
             return null;
@@ -388,9 +377,8 @@ class Utils
      * @param int $numSubmissions The total number of tries for this problem by this team
      * @param int $penaltyTime The penalty time for every wrong submission
      * @param bool $scoreIsInSeconds Whether scoring is in seconds
-     * @return int
      */
-    public static function calcPenaltyTime(bool $solved, int $numSubmissions, int $penaltyTime, bool $scoreIsInSeconds) : int
+    public static function calcPenaltyTime(bool $solved, int $numSubmissions, int $penaltyTime, bool $scoreIsInSeconds): int
     {
         if (!$solved) {
             return 0;
@@ -407,12 +395,11 @@ class Utils
     }
 
     /**
-     * Get the time as used on the scoreboard (i.e. truncated minutes or seconds, depending on the scoreboard resolution setting).
+     * Get the time as used on the scoreboard (i.e. truncated minutes or seconds, depending on the scoreboard
+     * resolution setting).
      * @param float|string $time
-     * @param bool $scoreIsInSeconds
-     * @return int
      */
-    public static function scoretime($time, bool $scoreIsInSeconds) : int
+    public static function scoretime($time, bool $scoreIsInSeconds): int
     {
         if ($scoreIsInSeconds) {
             $result = (int)($time);
@@ -425,9 +412,9 @@ class Utils
     /**
      * Formats a given hostname. If $full = true, then
      * the full hostname will be printed, else only
-     * the local part (for keeping tables readable)
+     * the local part (for keeping tables readable).
      */
-    public static function printhost(string $hostname, bool $full = false) : string
+    public static function printhost(string $hostname, bool $full = false): string
     {
         // Shorten the hostname to first label, but not if it's an IP address.
         if (! $full  && !preg_match('/^\d{1,3}(\.\d{1,3}){3}$/', $hostname)) {
@@ -442,7 +429,7 @@ class Utils
      * Print (file) size in human readable format by using B,KB,MB,GB suffixes.
      * Input is a integer (the size in bytes), output a string with suffix.
      */
-    public static function printsize(int $size, int $decimals = 1) : string
+    public static function printsize(int $size, int $decimals = 1): string
     {
         $factor = 1024;
         $units = ['B', 'KB', 'MB', 'GB'];
@@ -450,7 +437,7 @@ class Utils
 
         $exact = true;
         for ($i = 0; $i < count($units) && $display > $factor; $i++) {
-            if (($display % $factor)!=0) {
+            if (((int)$display % $factor)!=0) {
                 $exact = false;
             }
             $display /= $factor;
@@ -463,28 +450,23 @@ class Utils
     }
 
     /**
-     * Print a time formatted as specified. The format is according to strftime().
+     * Print a time formatted as specified. The format is according to date().
      * @param string|float $datetime
-     * @param string       $format
-     * @return string
      */
-    public static function printtime($datetime, string $format) : string
+    public static function printtime($datetime, string $format): string
     {
         if (empty($datetime)) {
             return '';
         }
-        return Utils::specialchars(strftime($format, (int)$datetime));
+        return Utils::specialchars(date($format, (int)$datetime));
     }
 
     /**
      * Print the time something took from start to end (which defaults to now).
      *
      * Copied from lib/www/print.php
-     * @param float $start
-     * @param float|null $end
-     * @return string
      */
-    public static function printtimediff(float $start, float $end = null) : string
+    public static function printtimediff(float $start, ?float $end = null): string
     {
         if (is_null($end)) {
             $end = microtime(true);
@@ -518,11 +500,8 @@ class Utils
      * - ENT_HTML5: Display those single quotes as the HTML5 entity &apos;.
      * - ENT_SUBSTITUTE: Replace any invalid Unicode characters with the
      *   Unicode replacement character.
-     *
-     * @param string $string
-     * @return string
      */
-    public static function specialchars(string $string) : string
+    public static function specialchars(string $string): string
     {
         return htmlspecialchars(
             $string,
@@ -532,11 +511,8 @@ class Utils
 
     /**
      * Cut a string at $size chars and append ..., only if necessary.
-     * @param string $str
-     * @param int    $size
-     * @return string
      */
-    public static function cutString(string $str, int $size) : string
+    public static function cutString(string $str, int $size): string
     {
         // is the string already short enough?
         // we count '…' for 1 extra chars.
@@ -548,16 +524,13 @@ class Utils
     }
 
     /**
-     * Compute the LCS diff of two lines
-     * @param string $line1
-     * @param string $line2
-     * @return array
+     * Compute the LCS diff of two lines.
      */
     public static function computeLcsDiff(string $line1, string $line2): array
     {
         $tokens1 = preg_split('/\s+/', $line1);
         $tokens2 = preg_split('/\s+/', $line2);
-        $cutoff = 100; // a) LCS gets inperformant, b) the output is not longer readable
+        $cutoff = 100; // a) LCS gets in-performant, b) the output is no longer readable.
 
         $n1 = min($cutoff, sizeof($tokens1));
         $n2 = min($cutoff, sizeof($tokens2));
@@ -595,7 +568,7 @@ class Utils
         }
         $lcs = array_reverse($lcs);
 
-        // reconstruct diff
+        // Reconstruct diff.
         $diff = "";
         $l = sizeof($lcs);
         $i = 0;
@@ -631,12 +604,10 @@ class Utils
     }
 
     /**
-     * Determine the image type for this image
-     * @param string $image
-     * @param string $error
+     * Determine the image type for this image.
      * @return bool|string
      */
-    public static function getImageType(string $image, &$error)
+    public static function getImageType(string $image, ?string &$error = null)
     {
         if (!function_exists('gd_info')) {
             $error = self::GD_MISSING;
@@ -660,15 +631,11 @@ class Utils
     }
 
     /**
-     * Generate resized thumbnail image and return as as string.
+     * Generate resized thumbnail image and return as string.
      * Return FALSE on errors and stores error message in $error if set.
-     * @param string $image
-     * @param int    $thumbMaxSize
-     * @param string $tmpdir
-     * @param string $error
      * @return bool|false|string
      */
-    public static function getImageThumb(string $image, int $thumbMaxSize, string $tmpdir, &$error)
+    public static function getImageThumb(string $image, int $thumbMaxSize, string $tmpdir, ?string &$error = null)
     {
         if (!function_exists('gd_info')) {
             $error = self::GD_MISSING;
@@ -737,9 +704,9 @@ class Utils
     /**
      * Get the image size of the given image.
      *
-     * This method supports PNG, JPG, BMP, GIF and SVG files
+     * This method supports PNG, JPG, BMP, GIF and SVG files.
      *
-     * Returns an array with three items: the width, height and ratio between width and height
+     * Returns an array with three items: the width, height and ratio between width and height.
      */
     public static function getImageSize(string $filename): array
     {
@@ -763,35 +730,25 @@ class Utils
     }
 
     /**
-     * Returns TRUE iff string $haystack starts with string $needle
-     * @param string $haystack
-     * @param string $needle
-     * @return bool
+     * Returns TRUE iff string $haystack starts with string $needle.
      */
-    public static function startsWith(string $haystack, string $needle) : bool
+    public static function startsWith(string $haystack, string $needle): bool
     {
         return mb_substr($haystack, 0, mb_strlen($needle)) === $needle;
     }
 
     /**
-     * Returns TRUE iff string $haystack ends with string $needle
-     * @param string $haystack
-     * @param string $needle
-     * @return bool
+     * Returns TRUE iff string $haystack ends with string $needle.
      */
-    public static function endsWith(string $haystack, string $needle) : bool
+    public static function endsWith(string $haystack, string $needle): bool
     {
         return mb_substr($haystack, mb_strlen($haystack)-mb_strlen($needle)) === $needle;
     }
 
     /**
      * Word wrap only unquoted text.
-     * @param string $text
-     * @param int    $width
-     * @param string $quote
-     * @return string
      */
-    public static function wrapUnquoted(string $text, int $width = 75, string $quote = '>') : string
+    public static function wrapUnquoted(string $text, int $width = 75, string $quote = '>'): string
     {
         $lines = explode("\n", $text);
 
@@ -823,12 +780,8 @@ class Utils
      * length 6 with lowercase alphanumeric, except o, 0, l and 1. `false`
      * should be used when generating password that will be printed and handed
      * out. In other cases, use `true`.
-     *
-     * @param bool $moreEntropy
-     *
-     * @return string
      */
-    public static function generatePassword(bool $moreEntropy = true) : string
+    public static function generatePassword(bool $moreEntropy = true): string
     {
         if ($moreEntropy) {
             $chars = array_merge(
@@ -855,7 +808,7 @@ class Utils
     /**
      * Convert size value as returned by ini_get to bytes.
      */
-    public static function phpiniToBytes(string $size_str) : int
+    public static function phpiniToBytes(string $size_str): int
     {
         switch (substr($size_str, -1)) {
             case 'M': case 'm': return (int)$size_str * 1048576;
@@ -866,12 +819,10 @@ class Utils
     }
 
     /**
-     * Return the table name for the given entity
+     * Return the table name for the given entity.
      * @param $entity
-     *
-     * @return string
      */
-    public static function tableForEntity($entity) : string
+    public static function tableForEntity($entity): string
     {
         $class        = get_class($entity);
         $parts        = explode('\\', $class);
@@ -880,11 +831,6 @@ class Utils
         return $inflector->tableize($entityType);
     }
 
-    /**
-     * @param string $content
-     * @param string $filename
-     * @return StreamedResponse
-     */
     public static function streamAsBinaryFile(string $content, string $filename, string $type = 'octet-stream'): StreamedResponse
     {
         $response = new StreamedResponse();
@@ -901,11 +847,7 @@ class Utils
     }
 
     /**
-     * Convert the given string to a field that is safe to use in a Tab Separated Values file
-     *
-     * @param string $field
-     *
-     * @return string
+     * Convert the given string to a field that is safe to use in a Tab Separated Values file.
      */
     public static function toTsvField(string $field) : string
     {
@@ -917,25 +859,17 @@ class Utils
     }
 
     /**
-     * Split a line from a Tab Separated Values file into fields
-     *
-     * @param string $line
-     *
-     * @return array
+     * Split a line from a Tab Separated Values file into fields.
      */
-    public static function parseTsvLine(string $line) : array
+    public static function parseTsvLine(string $line): array
     {
         return array_map('stripcslashes', explode("\t", rtrim($line, "\r\n")));
     }
 
     /**
-     * Reindex the given array by applying the callback to each item
-     * @param array    $array
-     * @param callable $callback
-     *
-     * @return array
+     * Reindex the given array by applying the callback to each item.
      */
-    public static function reindex(array $array, callable $callback)
+    public static function reindex(array $array, callable $callback): array
     {
         $reindexed = [];
         array_walk($array, function ($item, $key) use (&$reindexed, $callback) {

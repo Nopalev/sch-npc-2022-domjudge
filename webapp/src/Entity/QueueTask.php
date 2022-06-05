@@ -1,12 +1,8 @@
 <?php declare(strict_types=1);
 namespace App\Entity;
 
-use App\Doctrine\DBAL\Types\JudgeTaskType;
-use Doctrine\Common\Collections\ArrayCollection;
-use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 use JMS\Serializer\Annotation as Serializer;
-use Symfony\Component\Validator\Constraints as Assert;
 
 /**
  * An item in the queue.
@@ -22,59 +18,53 @@ use Symfony\Component\Validator\Constraints as Assert;
  *         @ORM\Index(name="teamid", columns={"teamid"}),
  *         @ORM\Index(name="starttime", columns={"starttime"}),
  *     },
- *     options={"collate"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Work items."}
+ *     options={"collation"="utf8mb4_unicode_ci", "charset"="utf8mb4", "comment"="Work items."}
  *     )
  */
 class QueueTask
 {
     /**
-     * @var int
-     *
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="AUTO")
      * @ORM\Column(type="integer", name="queuetaskid", length=4,
      *     options={"comment"="Queuetask ID","unsigned"=true},
      *     nullable=false)
      */
-    private $queuetaskid;
+    private int $queuetaskid;
 
     /**
-     * @var int
-     *
      * @ORM\Column(type="integer", name="jobid", length=4,
      *     options={"comment"="All queuetasks with the same jobid belong together.","unsigned"=true},
      *     nullable=true)
      * @Serializer\Type("string")
      */
-    private $jobid;
+    private ?int $jobid;
 
     /**
-     * @var int
      * @ORM\Column(type="integer", name="priority", length=4,
      *     options={"comment"="Priority; negative means higher priority",
      *              "unsigned"=false},
      *     nullable=false)
      */
-    private $priority;
+    private int $priority;
 
     /**
-     * @var int
      * @ORM\Column(type="integer", name="teampriority", length=4,
      *     options={"comment"="Team Priority; somewhat magic, lower implies higher priority.",
      *              "unsigned"=false},
      *     nullable=false)
      */
-    private $teamPriority;
+    private int $teamPriority;
 
     /**
      * @ORM\ManyToOne(targetEntity="Team")
      * @ORM\JoinColumn(name="teamid", referencedColumnName="teamid", onDelete="CASCADE")
      * @Serializer\Exclude()
      */
-    private $team;
+    private ?Team $team;
 
     /**
-     * @var double|null
+     * @var double|string|null
      * @ORM\Column(type="decimal", precision=32, scale=9, name="starttime", options={"comment"="Time started work",
      *                             "unsigned"=true}, nullable=true)
      * @Serializer\Exclude()

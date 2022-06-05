@@ -10,32 +10,26 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 class UpdateUserRolesListener implements EventSubscriberInterface
 {
-    /**
-     * @var TokenStorageInterface
-     */
-    protected $tokenStorage;
+    protected TokenStorageInterface $tokenStorage;
 
     public function __construct(TokenStorageInterface $tokenStorage)
     {
         $this->tokenStorage = $tokenStorage;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public static function getSubscribedEvents()
+    public static function getSubscribedEvents(): array
     {
         return [RequestEvent::class => 'onRequest'];
     }
 
-    public function onRequest(RequestEvent $event)
+    public function onRequest(RequestEvent $event): void
     {
-        // Only handle master requests, not sub requests
-        if (!$event->isMasterRequest()) {
+        // Only handle main requests, not sub requests.
+        if (!$event->isMainRequest()) {
             return;
         }
 
-        // If we have no token, do nothing
+        // If we have no token, do nothing.
         if (!$token = $this->tokenStorage->getToken()) {
             return;
         }
@@ -44,11 +38,10 @@ class UpdateUserRolesListener implements EventSubscriberInterface
         $roles = $token->getRoleNames();
 
         // If the roles from the token differ from the roles of the user,
-        // update the token
+        // update the token.
         if ($user instanceof UserInterface && $roles !== $user->getRoles()) {
             $token = new UsernamePasswordToken(
                 $user,
-                null,
                 'main',
                 $user->getRoles()
             );

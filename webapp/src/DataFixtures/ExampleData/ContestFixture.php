@@ -5,18 +5,13 @@ namespace App\DataFixtures\ExampleData;
 use App\Entity\Contest;
 use Doctrine\Common\DataFixtures\DependentFixtureInterface;
 use Doctrine\Persistence\ObjectManager;
-use Exception;
 
 class ContestFixture extends AbstractExampleDataFixture implements DependentFixtureInterface
 {
     public const PRACTICE_REFERENCE = 'practice';
     public const DEMO_REFERENCE     = 'demo';
 
-    /**
-     * @inheritDoc
-     * @throws Exception
-     */
-    public function load(ObjectManager $manager)
+    public function load(ObjectManager $manager): void
     {
         $demoPracticeContest = new Contest();
         $demoPracticeContest
@@ -83,10 +78,7 @@ class ContestFixture extends AbstractExampleDataFixture implements DependentFixt
         $this->addReference(self::DEMO_REFERENCE, $demoContest);
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getDependencies()
+    public function getDependencies(): array
     {
         return [TeamFixture::class, TeamCategoryFixture::class];
     }
